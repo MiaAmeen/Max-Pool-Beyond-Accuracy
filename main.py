@@ -96,22 +96,10 @@ def iterative_prune_train_retrain():
 
         # --- 2a. Prune conv layers ---
         print("Pruning conv layers...")
-        for i, layer in enumerate(model.conv_layers):
-            model.prune(layer, quality_param=ALPHA)
-
-        # Compute remaining connections per conv layer
-        conv_remaining = model.check_sparsity(type="CONV")
+        conv_remaining = [model.prune(layer, quality_param=ALPHA) for layer in model.conv_layers] + [1]*(len(model.fc_layers))
 
         # Scale dropout rates for conv layers
-        new_dropout_rates = []
-        for i, layer in enumerate(model.conv_layers):
-            total = layer.weight.numel()
-            orig_p = ALEXNET_INIT_DROPOUT_RATES[i]
-            new_p = orig_p * math.sqrt(conv_remaining[i] / total)
-            new_dropout_rates.append(new_p)
-        # Append current FC dropout rates unchanged
-        new_dropout_rates.extend(ALEXNET_INIT_DROPOUT_RATES[5:])  
-        model.update_dropout(new_dropout_rates)
+        model.update_dropout(conv_remaining)
 
         # Freeze FC layers during conv retraining
         for layer in model.fc_layers:
@@ -133,20 +121,10 @@ def iterative_prune_train_retrain():
 
         # --- 2b. Prune FC layers ---
         print("Pruning FC layers...")
-        for i, layer in enumerate(model.fc_layers):
-            model.prune(layer, quality_param=ALPHA)
-
-        # Compute remaining connections per FC layer
-        fc_remaining = model.check_sparsity(type="FC")
+        fc_remaining = [1]*(len(model.conv_layers)) + [model.prune(layer, quality_param=ALPHA) for layer in model.fc_layers]
 
         # Scale dropout rates for FC layers
-        new_dropout_rates = new_dropout_rates[:5]  # keep conv rates
-        for i, layer in enumerate(model.fc_layers):
-            total = layer.weight.numel()
-            orig_p = ALEXNET_INIT_DROPOUT_RATES[5 + i]
-            new_p = orig_p * math.sqrt(fc_remaining[0] / total)
-            new_dropout_rates.append(new_p)
-        model.update_dropout(new_dropout_rates)
+        model.update_dropout(fc_remaining)
 
         # Freeze conv layers during FC retraining
         for layer in model.conv_layers:
@@ -166,13 +144,9 @@ def iterative_prune_train_retrain():
             acc = evaluate(model, testloader)
             print(f"Retrain Epoch {epoch+1}/{RETRAIN_EPOCHS}, Loss: {loss:.4f}, Test Acc: {acc:.2f}%")
 
-        # --- 2c. Print sparsity stats ---
-        stats = model.check_sparsity()
-        print(f"Remaining weights per layer: {stats}")
-
         # Optional: check overall sparsity and break if target reached
         total_params = sum([layer.weight.numel() for layer in model.conv_layers + model.fc_layers])
-        remaining_params = sum(stats)
+        remaining_params = sum(conv_remaining) + sum(fc_remaining)
         overall_sparsity = 1 - remaining_params / total_params
         print(f"Overall sparsity: {overall_sparsity:.4f}")
         if overall_sparsity >= target_sparsity:
