@@ -7,16 +7,15 @@ import torchvision
 import torchvision.transforms as transforms
 from tqdm import tqdm
 from alexnet import AlexNet
-from torchvision.models import alexnet
 
 
-DEVICE = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+DEVICE = torch.device("mps" if torch.backends.mps.is_available() else "gpu" if torch.cuda.is_available() else "cpu")
 
 # -------------------------
 # HYPERPARAMS
 # -------------------------
 BATCH_SIZE = 128
-INITIAL_TRAIN_EPOCHS = 20        # dense training
+INITIAL_TRAIN_EPOCHS = 200        # dense training
 RETRAIN_EPOCHS = 30               # fine-tune after each pruning
 LEARNING_RATE = .05
 WEIGHT_DECAY = 1e-4              # L2 regularization (weight decay)
@@ -92,7 +91,7 @@ def initial_dense_train(model, trainloader, testloader):
         test_acc = evaluate(model, testloader)
         print(f"Epoch {epoch+1}/{INITIAL_TRAIN_EPOCHS}, Loss: {loss:.4f}, Test Acc: {test_acc:.4f}%")
 
-    model_path = f"model-initial-{len(trainloader)}.pth"
+    model_path = "model-initial.pth"
     torch.save(model.state_dict(), model_path)
     return model_path
 
@@ -162,7 +161,7 @@ def iterative_prune_train_retrain(model, model_path, trainloader, testloader):
 # Run experiment
 # -------------------------
 if __name__ == "__main__":
-    trainloader, testloader = get_dataloaders('CIFAR10', toy_data=True)
+    trainloader, testloader = get_dataloaders('CIFAR10')
     model = AlexNet(num_classes=NUM_CLASSES_CIFAR10).to(DEVICE)
     model_path = initial_dense_train(model=model, trainloader=trainloader, testloader=testloader)
     # iterative_prune_train_retrain(model, model_path=model_path, trainloader=trainloader, testloader=testloader)
