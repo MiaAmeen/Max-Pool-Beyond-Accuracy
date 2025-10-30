@@ -9,7 +9,7 @@ from tqdm import tqdm
 from alexnet import AlexNet
 
 
-DEVICE = torch.device("gpu" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
 
 # -------------------------
 # HYPERPARAMS
@@ -39,7 +39,6 @@ def get_dataloaders(dataset_name, batch_size=BATCH_SIZE, toy_data=False):
     testset = dataset_cls(root='./data', train=False, download=True, transform=transform)
 
     if toy_data:
-        # Randomly sample smaller subsets
         trainset = Subset(trainset, random.sample(range(len(trainset)), 512))
         testset = Subset(testset, random.sample(range(len(testset)), 128))
 
