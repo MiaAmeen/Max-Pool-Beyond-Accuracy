@@ -9,7 +9,7 @@ from tqdm import tqdm
 from alexnet import AlexNet
 
 
-DEVICE = torch.device("mps" if torch.backends.mps.is_available() else "gpu" if torch.cuda.is_available() else "cpu")
+DEVICE = torch.device("gpu" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
 
 # -------------------------
 # HYPERPARAMS
