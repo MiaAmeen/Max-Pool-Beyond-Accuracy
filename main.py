@@ -4,9 +4,10 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Subset
 import torchvision
-import torchvision.transforms as transforms
+from torchvision import datasets, transforms
 from tqdm import tqdm
 from alexnet import AlexNet
+import os
 
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
@@ -29,14 +30,20 @@ MAX_SPARSITY = 0.9               # target sparsity level
 # -------------------------
 # Data (CIFAR-10)
 # -------------------------
+DATA_PATH = "/share/csc591007f25/fameen/MaxPooling/data/"
 def get_dataloaders(dataset_name, batch_size=BATCH_SIZE, toy_data=False):
     transform = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     ])
-    dataset_cls = torchvision.datasets.CIFAR10 if dataset_name == 'CIFAR10' else torchvision.datasets.CIFAR100
-    trainset = dataset_cls(root='./data', train=True, download=True, transform=transform)
-    testset = dataset_cls(root='./data', train=False, download=True, transform=transform)
+    
+    if dataset_name == 'CIFAR10':
+        dataset_cls, exists = torchvision.datasets.CIFAR10, os.path.exists(os.path.join(DATA_PATH, 'cifar-10-batches-py'))
+    else:
+        dataset_cls, exists = torchvision.datasets.CIFAR100, os.path.exists(os.path.join(DATA_PATH, 'cifar-100-python'))
+
+    trainset = dataset_cls(root=DATA_PATH, train=True, download=not exists, transform=transform)
+    testset = dataset_cls(root=DATA_PATH, train=False, download=not exists, transform=transform)
 
     if toy_data:
         trainset = Subset(trainset, random.sample(range(len(trainset)), 512))
