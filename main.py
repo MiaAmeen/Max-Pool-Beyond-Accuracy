@@ -91,11 +91,13 @@ def initial_dense_train(model, trainloader, testloader):
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=INITIAL_TRAIN_EPOCHS)  # match full training duration
 
     print("=== Initial dense training ===")
+    print("Epoch, Loss, Train Acc, Test Acc")
     for epoch in range(INITIAL_TRAIN_EPOCHS):
         loss = train_one_epoch(model, trainloader, optimizer, criterion)
         scheduler.step()
+        train_acc = evaluate(model, trainloader)
         test_acc = evaluate(model, testloader)
-        print(f"Epoch {epoch+1}/{INITIAL_TRAIN_EPOCHS}, Loss: {loss:.4f}, Test Acc: {test_acc:.4f}%")
+        print(f"{epoch+1}/{INITIAL_TRAIN_EPOCHS}, {loss:.4f}, {train_acc:.4f}, {test_acc:.4f}")
 
     model_path = "model-initial.pth"
     torch.save(model.state_dict(), model_path)
