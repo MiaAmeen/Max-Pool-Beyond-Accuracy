@@ -30,6 +30,7 @@ NUM_CLASSES_CIFAR10 = 10
 # -------------------------
 DATA_PATH = "/share/csc591007f25/fameen/MaxPooling/data/"
 # DATA_PATH = "./data/"
+MODEL_PATH = "/models/"
 def get_dataloaders(dataset_name, batch_size=BATCH_SIZE, toy_data=False):
     transform = transforms.Compose([
         transforms.ToTensor(),
@@ -164,7 +165,7 @@ def iterative_prune_train_retrain(model, model_path, dataset_name, trainloader, 
 # -------------------------
 if __name__ == "__main__":
     dataset_name = 'CIFAR10'
-    model_path = "models/initAlexNetCIFAR10max.pth"
+    model_path = MODEL_PATH + "initAlexNetCIFAR10max.pth"
     trainloader, testloader = get_dataloaders(dataset_name)
     model = AlexNet(num_classes=NUM_CLASSES_CIFAR10, pooling_method="max").to(DEVICE)
     # model_path = initial_dense_train(model=model, dataset_name=dataset_name, trainloader=trainloader, testloader=testloader)
