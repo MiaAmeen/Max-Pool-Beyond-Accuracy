@@ -7,17 +7,22 @@ class AlexNet(nn.Module):
     AlexNet variant for CIFAR-10 with configurable dropout after each convolutional layer.
     Includes dropout placeholders that can be turned off (set to Identity) or have their rates changed dynamically.
     """
-    def __init__(self, num_classes=10, dropout_rates=None):
+    def __init__(self, num_classes=10, pooling_method="max"):
         super(AlexNet, self).__init__()
+
+        if pooling_method == "max":
+            pool_layer = nn.MaxPool2d
+        else:
+            pool_layer = nn.AvgPool2d
 
         self.features = nn.Sequential(
             nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1),
             nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=2, stride=2),  # 32 -> 16
+            pool_layer(kernel_size=2, stride=2),  # 32 -> 16
 
             nn.Conv2d(64, 192, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=2, stride=2),  # 16 -> 8
+            pool_layer(kernel_size=2, stride=2),  # 16 -> 8
 
             nn.Conv2d(192, 384, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
@@ -27,7 +32,7 @@ class AlexNet(nn.Module):
 
             nn.Conv2d(256, 256, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=2, stride=2)   # 8 -> 4
+            pool_layer(kernel_size=2, stride=2)   # 8 -> 4
         )
         self.classifier = nn.Sequential(
             nn.Dropout(),

@@ -170,6 +170,6 @@ def iterative_prune_train_retrain(model, model_path, trainloader, testloader):
 # -------------------------
 if __name__ == "__main__":
     trainloader, testloader = get_dataloaders('CIFAR10')
-    model = AlexNet(num_classes=NUM_CLASSES_CIFAR10).to(DEVICE)
+    model = AlexNet(num_classes=NUM_CLASSES_CIFAR10, pooling_method="avg").to(DEVICE)
     model_path = initial_dense_train(model=model, trainloader=trainloader, testloader=testloader)
     # iterative_prune_train_retrain(model, model_path=model_path, trainloader=trainloader, testloader=testloader)
