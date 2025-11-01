@@ -3,7 +3,6 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Subset
-import torchvision
 from torchvision import datasets, transforms
 from tqdm import tqdm
 from alexnet import AlexNet
@@ -38,9 +37,9 @@ def get_dataloaders(dataset_name, batch_size=BATCH_SIZE, toy_data=False):
     ])
     
     if dataset_name == 'CIFAR10':
-        dataset_cls, exists = torchvision.datasets.CIFAR10, os.path.exists(os.path.join(DATA_PATH, 'cifar-10-batches-py'))
+        dataset_cls, exists = datasets.CIFAR10, os.path.exists(os.path.join(DATA_PATH, 'cifar-10-batches-py'))
     else:
-        dataset_cls, exists = torchvision.datasets.CIFAR100, os.path.exists(os.path.join(DATA_PATH, 'cifar-100-python'))
+        dataset_cls, exists = datasets.CIFAR100, os.path.exists(os.path.join(DATA_PATH, 'cifar-100-python'))
 
     trainset = dataset_cls(root=DATA_PATH, train=True, download=not exists, transform=transform)
     testset = dataset_cls(root=DATA_PATH, train=False, download=not exists, transform=transform)
@@ -114,6 +113,7 @@ def iterative_prune_train_retrain(model, model_path, trainloader, testloader):
     # --- 2. Iterative pruning + retraining ---
     for prune_iter in range(PRUNE_ITERATIONS):
         print(f"\n=== Prune iteration {prune_iter+1}/{PRUNE_ITERATIONS} ===")
+        print("Prune Iteration, conv1, con2, conv3, conv4, conv5, train accuracy, pruned accuracy, retrain accuracy")
 
         # --- 2a. Prune conv layers ---
         print("Pruning conv layers...")
@@ -134,8 +134,9 @@ def iterative_prune_train_retrain(model, model_path, trainloader, testloader):
         print("Retraining conv layers...")
         for epoch in range(RETRAIN_EPOCHS):
             loss = train_one_epoch(model, trainloader, optimizer, criterion)
-            acc = evaluate(model, testloader)
-            print(f"Retrain Epoch {epoch+1}/{RETRAIN_EPOCHS}, Loss: {loss:.4f}, Test Acc: {acc:.2f}%")
+            train_acc = evaluate(model, trainloader)
+            test_acc = evaluate(model, testloader)
+            print(f"{epoch+1}/{INITIAL_TRAIN_EPOCHS}, {loss:.4f}, {train_acc:.4f}, {test_acc:.4f}")
 
         # --- 2b. Prune FC layers ---
         print("Pruning FC layers...")
