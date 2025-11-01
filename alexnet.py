@@ -10,6 +10,7 @@ class AlexNet(nn.Module):
     def __init__(self, num_classes=10, pooling_method="max"):
         super(AlexNet, self).__init__()
         self.name = "AlexNet"
+        self.pooling_method = pooling_method
 
         if pooling_method == "max":
             pool_layer = nn.MaxPool2d
@@ -56,12 +57,14 @@ class AlexNet(nn.Module):
     def prune(self, layer, quality_param, remove=False):
         if prune.is_pruned(layer):
             weights = layer.weight_orig.data
+            old_mask = layer.weight_mask
         else:
             weights = layer.weight.data
+            old_mask = torch.ones_like(weights, dtype=torch.bool)
 
         threshold = quality_param * torch.std(weights).item()
         mask = torch.abs(weights) > threshold
-        prune.custom_from_mask(layer, name="weight", mask=mask)
+        prune.custom_from_mask(layer, name="weight", mask=mask & old_mask)
         
         if remove: prune.remove(layer, 'weight')
 

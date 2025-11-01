@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import csv
 from io import StringIO
 
-OUTPUT_DIR = "results/plots/"
+OUTPUT_DIR = "results/"
 
 def plot_initial_dense_train_accuracy_over_epochs(out_name, data_content):
     """
@@ -59,6 +59,6 @@ def plot_initial_dense_train_accuracy_over_epochs(out_name, data_content):
 
 
 if __name__ == "__main__":
-    with open(OUTPUT_DIR + 'initAlexNetCIFAR10max.csv', 'r') as f:
+    with open(OUTPUT_DIR + 'initAlexNetCIFAR10avg.csv', 'r') as f:
         data_content = f.read()
-        plot_initial_dense_train_accuracy_over_epochs(OUTPUT_DIR + "initAlexNetCIFAR10max.png", data_content)
+        plot_initial_dense_train_accuracy_over_epochs(OUTPUT_DIR + "plots/initAlexNetCIFAR10avg.png", data_content)

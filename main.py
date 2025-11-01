@@ -14,22 +14,22 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.ba
 # -------------------------
 # HYPERPARAMS
 # -------------------------
+CRITERION = nn.CrossEntropyLoss()
 BATCH_SIZE = 128
 INITIAL_TRAIN_EPOCHS = 200        # dense training
-RETRAIN_EPOCHS = 30               # fine-tune after each pruning
+MAX_RETRAIN_EPOCHS = 30               # fine-tune after each pruning
 LEARNING_RATE = .05
 WEIGHT_DECAY = 1e-4              # L2 regularization (weight decay)
 MOMENTUM = 0.9
 PRUNE_ITERATIONS = 5             # number of prune->retrain cycles
-ALPHA = 0.05                      # quality parameter to multiply stddev (tunable)
-ALEXNET_INIT_DROPOUT_RATES = [0.05, 0.15, 0.25, 0.5, 0.5] # ehhh
+ALPHA = 0.1                      # quality parameter to multiply stddev (tunable)
 NUM_CLASSES_CIFAR10 = 10
-MAX_SPARSITY = 0.9               # target sparsity level
 
 # -------------------------
 # Data (CIFAR-10)
 # -------------------------
 DATA_PATH = "/share/csc591007f25/fameen/MaxPooling/data/"
+# DATA_PATH = "./data/"
 def get_dataloaders(dataset_name, batch_size=BATCH_SIZE, toy_data=False):
     transform = transforms.Compose([
         transforms.ToTensor(),
@@ -85,14 +85,13 @@ def evaluate(model, dataloader):
 
 
 def initial_dense_train(model, dataset_name, trainloader, testloader):
-    criterion = nn.CrossEntropyLoss()
     optimizer = optim.SGD(model.parameters(), lr=LEARNING_RATE, momentum=MOMENTUM, weight_decay=WEIGHT_DECAY)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=INITIAL_TRAIN_EPOCHS)  # match full training duration
 
     print("=== Initial dense training ===")
     print("Epoch, Loss, Train Acc, Test Acc")
     for epoch in range(INITIAL_TRAIN_EPOCHS):
-        loss = train_one_epoch(model, trainloader, optimizer, criterion)
+        loss = train_one_epoch(model, trainloader, optimizer, CRITERION)
         scheduler.step()
         train_acc = evaluate(model, trainloader)
         test_acc = evaluate(model, testloader)
@@ -103,22 +102,19 @@ def initial_dense_train(model, dataset_name, trainloader, testloader):
     return model_path
 
 
-def iterative_prune_train_retrain(model, model_path, trainloader, testloader):
+def iterative_prune_train_retrain(model, model_path, dataset_name, trainloader, testloader):
+    # Printing Header
+    print("Prune Iteration, conv1, conv2, conv3, conv4, conv5, fc1, fc2, train accuracy, pruned accuracy, retrain accuracy")
+
     # Load initial dense model
     model.load_state_dict(torch.load(model_path, map_location=DEVICE))
-
-    criterion = nn.CrossEntropyLoss()
-    optimizer = optim.SGD(model.parameters(), lr=LEARNING_RATE, momentum=MOMENTUM, weight_decay=WEIGHT_DECAY)
+    base_acc = evaluate(model, testloader)
 
     # --- 2. Iterative pruning + retraining ---
-    for prune_iter in range(PRUNE_ITERATIONS):
-        print(f"\n=== Prune iteration {prune_iter+1}/{PRUNE_ITERATIONS} ===")
-        print("Prune Iteration, conv1, con2, conv3, conv4, conv5, train accuracy, pruned accuracy, retrain accuracy")
-
-        # --- 2a. Prune conv layers ---
-        print("Pruning conv layers...")
+    for prune_iter in range(PRUNE_ITERATIONS):        
+        # --- Prune conv layers ---
         conv_sparsities = [model.prune(layer, quality_param=ALPHA) for layer in model.conv_layers]
-        print(f"Conv layer sparsities: {[f'{s:.4f}, ' for s in conv_sparsities]}")
+        pruned_acc = evaluate(model, testloader)
 
         # Freeze FC layers during conv retraining
         for layer in model.fc_layers:
@@ -131,17 +127,11 @@ def iterative_prune_train_retrain(model, model_path, trainloader, testloader):
                               lr=LEARNING_RATE, momentum=MOMENTUM, weight_decay=WEIGHT_DECAY)
 
         # Retrain conv layers
-        print("Retraining conv layers...")
-        for epoch in range(RETRAIN_EPOCHS):
-            loss = train_one_epoch(model, trainloader, optimizer, criterion)
-            train_acc = evaluate(model, trainloader)
-            test_acc = evaluate(model, testloader)
-            print(f"{epoch+1}/{INITIAL_TRAIN_EPOCHS}, {loss:.4f}, {train_acc:.4f}, {test_acc:.4f}")
+        for _ in range(MAX_RETRAIN_EPOCHS):
+            train_one_epoch(model, trainloader, optimizer, CRITERION)
 
-        # --- 2b. Prune FC layers ---
-        print("Pruning FC layers...")
+        # --- Prune FC layers ---
         fc_sparsities = [model.prune(layer, quality_param=ALPHA) for layer in model.fc_layers]
-        print(f"FC layer sparsities: {[f'{s:.4f}, ' for s in fc_sparsities]}")
 
         # Freeze conv layers during FC retraining
         for layer in model.conv_layers:
@@ -154,24 +144,28 @@ def iterative_prune_train_retrain(model, model_path, trainloader, testloader):
                               lr=LEARNING_RATE, momentum=MOMENTUM, weight_decay=WEIGHT_DECAY)
 
         # Retrain FC layers
-        print("Retraining FC layers...")
-        for epoch in range(RETRAIN_EPOCHS):
-            loss = train_one_epoch(model, trainloader, optimizer, criterion)
-            acc = evaluate(model, testloader)
-            print(f"Retrain Epoch {epoch+1}/{RETRAIN_EPOCHS}, Loss: {loss:.4f}, Test Acc: {acc:.2f}%")
+        for _ in range(MAX_RETRAIN_EPOCHS):
+            train_one_epoch(model, trainloader, optimizer, CRITERION)
 
-        torch.save(model.state_dict(), f"model-{prune_iter}.pth")
+        retrain_acc = evaluate(model, testloader)
 
-    print("=== Pruning + retraining complete ===")
-    return model, evaluate(model, testloader)
+        print(f"{prune_iter+1}, {', '.join(f'{sparsity:.4f}' for sparsity in conv_sparsities)}, \
+              {', '.join(f'{sparsity:.4f}' for sparsity in fc_sparsities)}, \
+                {base_acc}, {pruned_acc}, {retrain_acc}")
+        
+        base_acc = retrain_acc
+
+    torch.save(model.state_dict(), f"prune{model.name}{dataset_name}{model.pooling_method}.pth")
+    return model
 
 
 # -------------------------
 # Run experiment
 # -------------------------
 if __name__ == "__main__":
-    dataset_name = 'CIFAR100'
+    dataset_name = 'CIFAR10'
+    model_path = "models/initAlexNetCIFAR10max.pth"
     trainloader, testloader = get_dataloaders(dataset_name)
-    model = AlexNet(num_classes=NUM_CLASSES_CIFAR10, pooling_method="avg").to(DEVICE)
-    model_path = initial_dense_train(model=model, dataset_name=dataset_name, trainloader=trainloader, testloader=testloader)
-    # iterative_prune_train_retrain(model, model_path=model_path, trainloader=trainloader, testloader=testloader)
+    model = AlexNet(num_classes=NUM_CLASSES_CIFAR10, pooling_method="max").to(DEVICE)
+    # model_path = initial_dense_train(model=model, dataset_name=dataset_name, trainloader=trainloader, testloader=testloader)
+    iterative_prune_train_retrain(model, dataset_name=dataset_name, model_path=model_path, trainloader=trainloader, testloader=testloader)
