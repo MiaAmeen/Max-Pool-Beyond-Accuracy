@@ -85,7 +85,7 @@ def evaluate(model, dataloader):
     return 100.0 * correct / total
 
 
-def initial_dense_train(model, trainloader, testloader):
+def initial_dense_train(model, dataset_name, trainloader, testloader):
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.SGD(model.parameters(), lr=LEARNING_RATE, momentum=MOMENTUM, weight_decay=WEIGHT_DECAY)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=INITIAL_TRAIN_EPOCHS)  # match full training duration
@@ -99,7 +99,7 @@ def initial_dense_train(model, trainloader, testloader):
         test_acc = evaluate(model, testloader)
         print(f"{epoch+1}/{INITIAL_TRAIN_EPOCHS}, {loss:.4f}, {train_acc:.4f}, {test_acc:.4f}")
 
-    model_path = "model-initial.pth"
+    model_path = f"model-init-{model.name}{dataset_name}.pth"
     torch.save(model.state_dict(), model_path)
     return model_path
 
@@ -169,7 +169,8 @@ def iterative_prune_train_retrain(model, model_path, trainloader, testloader):
 # Run experiment
 # -------------------------
 if __name__ == "__main__":
-    trainloader, testloader = get_dataloaders('CIFAR10')
+    dataset_name = 'CIFAR100'
+    trainloader, testloader = get_dataloaders(dataset_name)
     model = AlexNet(num_classes=NUM_CLASSES_CIFAR10, pooling_method="avg").to(DEVICE)
-    model_path = initial_dense_train(model=model, trainloader=trainloader, testloader=testloader)
+    model_path = initial_dense_train(model=model, dataset_name=dataset_name, trainloader=trainloader, testloader=testloader)
     # iterative_prune_train_retrain(model, model_path=model_path, trainloader=trainloader, testloader=testloader)

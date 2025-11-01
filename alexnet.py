@@ -6,9 +6,10 @@ class AlexNet(nn.Module):
     """
     AlexNet variant for CIFAR-10 with configurable dropout after each convolutional layer.
     Includes dropout placeholders that can be turned off (set to Identity) or have their rates changed dynamically.
-    """
+    """    
     def __init__(self, num_classes=10, pooling_method="max"):
         super(AlexNet, self).__init__()
+        self.name = "AlexNet"
 
         if pooling_method == "max":
             pool_layer = nn.MaxPool2d
