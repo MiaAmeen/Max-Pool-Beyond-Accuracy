@@ -1,3 +1,4 @@
+import argparse
 import random
 import torch
 import torch.nn as nn
@@ -30,14 +31,15 @@ NUM_CLASSES_CIFAR10 = 10
 # -------------------------
 DATA_PATH = "/share/csc591007f25/fameen/MaxPooling/data/"
 # DATA_PATH = "./data/"
-MODEL_PATH = "/models/"
-def get_dataloaders(dataset_name, batch_size=BATCH_SIZE, toy_data=False):
+MODEL_PATH = "/share/csc591007f25/fameen/MaxPooling/models/"
+# MODEL_PATH = "./models/"
+def get_dataloaders(dataset, batch_size=BATCH_SIZE, toy_data=False):
     transform = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     ])
     
-    if dataset_name == 'CIFAR10':
+    if dataset == 'CIFAR10':
         dataset_cls, exists = datasets.CIFAR10, os.path.exists(os.path.join(DATA_PATH, 'cifar-10-batches-py'))
     else:
         dataset_cls, exists = datasets.CIFAR100, os.path.exists(os.path.join(DATA_PATH, 'cifar-100-python'))
@@ -85,7 +87,7 @@ def evaluate(model, dataloader):
     return 100.0 * correct / total
 
 
-def initial_dense_train(model, dataset_name, trainloader, testloader):
+def initial_dense_train(model, dataset, trainloader, testloader):
     optimizer = optim.SGD(model.parameters(), lr=LEARNING_RATE, momentum=MOMENTUM, weight_decay=WEIGHT_DECAY)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=INITIAL_TRAIN_EPOCHS)  # match full training duration
 
@@ -98,12 +100,12 @@ def initial_dense_train(model, dataset_name, trainloader, testloader):
         test_acc = evaluate(model, testloader)
         print(f"{epoch+1}/{INITIAL_TRAIN_EPOCHS}, {loss:.4f}, {train_acc:.4f}, {test_acc:.4f}")
 
-    model_path = f"model-init-{model.name}{dataset_name}.pth"
+    model_path = f"model-init-{model.name}{dataset}.pth"
     torch.save(model.state_dict(), model_path)
     return model_path
 
 
-def iterative_prune_train_retrain(model, model_path, dataset_name, trainloader, testloader):
+def iterative_prune_train_retrain(model, model_path, dataset, trainloader, testloader):
     # Printing Header
     print("Prune Iteration, conv1, conv2, conv3, conv4, conv5, fc1, fc2, train accuracy, pruned accuracy, retrain accuracy")
 
@@ -156,7 +158,7 @@ def iterative_prune_train_retrain(model, model_path, dataset_name, trainloader, 
         
         base_acc = retrain_acc
 
-    torch.save(model.state_dict(), f"prune{model.name}{dataset_name}{model.pooling_method}.pth")
+    torch.save(model.state_dict(), f"prune{model.name}{dataset}{model.pooling_method}.pth")
     return model
 
 
@@ -164,9 +166,27 @@ def iterative_prune_train_retrain(model, model_path, dataset_name, trainloader, 
 # Run experiment
 # -------------------------
 if __name__ == "__main__":
-    dataset_name = 'CIFAR10'
-    model_path = MODEL_PATH + "initAlexNetCIFAR10max.pth"
-    trainloader, testloader = get_dataloaders(dataset_name)
-    model = AlexNet(num_classes=NUM_CLASSES_CIFAR10, pooling_method="max").to(DEVICE)
-    # model_path = initial_dense_train(model=model, dataset_name=dataset_name, trainloader=trainloader, testloader=testloader)
-    iterative_prune_train_retrain(model, dataset_name=dataset_name, model_path=model_path, trainloader=trainloader, testloader=testloader)
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '--dataset', 
+        type=str,
+        choices=['CIFAR10', 'CIFAR100'], 
+    )
+    parser.add_argument(
+        '--pooling_method', 
+        type=str, 
+        choices=['max', 'avg'],
+    )
+    parser.add_argument(
+        '--model_path', 
+        type=str, 
+    )
+    args = parser.parse_args()
+        
+    model_path = MODEL_PATH + args.model_path
+    dataset = args.dataset
+    pooling_method = args.pooling_method
+
+    trainloader, testloader = get_dataloaders(dataset)
+    model = AlexNet(num_classes=NUM_CLASSES_CIFAR10, pooling_method=pooling_method).to(DEVICE)
+    iterative_prune_train_retrain(model, dataset=dataset, model_path=model_path, trainloader=trainloader, testloader=testloader)
