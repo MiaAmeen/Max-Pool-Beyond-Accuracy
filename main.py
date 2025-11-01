@@ -9,7 +9,6 @@ from tqdm import tqdm
 from alexnet import AlexNet
 import os
 
-
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
 
 # -------------------------
@@ -152,9 +151,7 @@ def iterative_prune_train_retrain(model, model_path, dataset, trainloader, testl
 
         retrain_acc = evaluate(model, testloader)
 
-        print(f"{prune_iter+1}, {', '.join(f'{sparsity:.4f}' for sparsity in conv_sparsities)}, \
-              {', '.join(f'{sparsity:.4f}' for sparsity in fc_sparsities)}, \
-                {base_acc}, {pruned_acc}, {retrain_acc}")
+        print(f"{prune_iter+1}, {', '.join(f'{sparsity:.4f}' for sparsity in conv_sparsities)}, {', '.join(f'{sparsity:.4f}' for sparsity in fc_sparsities)}, {base_acc}, {pruned_acc}, {retrain_acc}")
         
         base_acc = retrain_acc
 
