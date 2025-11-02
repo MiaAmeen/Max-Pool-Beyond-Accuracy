@@ -57,10 +57,10 @@ class AlexNet(nn.Module):
     def prune(self, layer, quality_param, remove=False):
         if prune.is_pruned(layer):
             weights = layer.weight_orig.data
-            old_mask = layer.weight_mask
+            old_mask = layer.weight_mask.to(dtype=torch.int32)
         else:
             weights = layer.weight.data
-            old_mask = torch.ones_like(weights)
+            old_mask = torch.ones_like(weights, dtype=torch.int32)
 
         threshold = quality_param * torch.std(weights).item()
         mask = (torch.abs(weights) > threshold).int()
@@ -75,8 +75,8 @@ class AlexNet(nn.Module):
         return torch.sum(w == 0) / w.numel()
 
 
-if __name__ == "__main__":
-    model = AlexNet()
-    model.prune(model.conv_layers[0], quality_param=0.5)
-    print(model.check_sparsity(model.conv_layers[0]))
-    model.prune(model.conv_layers[0], quality_param=0.5)
+# if __name__ == "__main__":
+#     model = AlexNet()
+#     model.prune(model.conv_layers[0], quality_param=0.5)
+#     print(model.check_sparsity(model.conv_layers[0]))
+#     model.prune(model.conv_layers[0], quality_param=0.5)

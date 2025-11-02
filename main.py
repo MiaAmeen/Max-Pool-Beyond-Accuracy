@@ -28,10 +28,10 @@ NUM_CLASSES_CIFAR10 = 10
 # -------------------------
 # Data (CIFAR-10)
 # -------------------------
-DATA_PATH = "/share/csc591007f25/fameen/MaxPooling/data/"
-# DATA_PATH = "./data/"
-MODEL_PATH = "/share/csc591007f25/fameen/MaxPooling/models/"
-# MODEL_PATH = "./models/"
+# DATA_PATH = "/share/csc591007f25/fameen/MaxPooling/data/"
+DATA_PATH = "./data/"
+# MODEL_PATH = "/share/csc591007f25/fameen/MaxPooling/models/"
+MODEL_PATH = "./models/"
 def get_dataloaders(dataset, batch_size=BATCH_SIZE, toy_data=False):
     transform = transforms.Compose([
         transforms.ToTensor(),
@@ -86,20 +86,19 @@ def evaluate(model, dataloader):
     return 100.0 * correct / total
 
 
-def initial_dense_train(model, dataset, trainloader, testloader):
+def initial_dense_train(model, dataset, trainloader, testloader, iter=None):
     optimizer = optim.SGD(model.parameters(), lr=LEARNING_RATE, momentum=MOMENTUM, weight_decay=WEIGHT_DECAY)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=INITIAL_TRAIN_EPOCHS)  # match full training duration
 
-    print("=== Initial dense training ===")
-    print("Epoch, Loss, Train Acc, Test Acc")
+    print("ITER, Epoch, Loss, Train Acc, Test Acc")
     for epoch in range(INITIAL_TRAIN_EPOCHS):
         loss = train_one_epoch(model, trainloader, optimizer, CRITERION)
         scheduler.step()
         train_acc = evaluate(model, trainloader)
         test_acc = evaluate(model, testloader)
-        print(f"{epoch+1}/{INITIAL_TRAIN_EPOCHS}, {loss:.4f}, {train_acc:.4f}, {test_acc:.4f}")
+        print(f"{iter if iter else 1}, {epoch+1}/{INITIAL_TRAIN_EPOCHS}, {loss:.4f}, {train_acc:.4f}, {test_acc:.4f}")
 
-    model_path = f"model-init-{model.name}{dataset}.pth"
+    model_path = MODEL_PATH + f"init{iter if iter else ""}{model.name}{dataset}{model.pooling_method}.pth"
     torch.save(model.state_dict(), model_path)
     return model_path
 
@@ -158,6 +157,10 @@ def iterative_prune_train_retrain(model, model_path, dataset, trainloader, testl
     torch.save(model.state_dict(), f"prune{model.name}{dataset}{model.pooling_method}.pth")
     return model
 
+def sample_dense_training(dataset, trainloader, testloader, pooling_method):
+    for iter in range(20):
+        model = AlexNet(num_classes=NUM_CLASSES_CIFAR10, pooling_method=pooling_method).to(DEVICE)
+        initial_dense_train(model, dataset=dataset, trainloader=trainloader, testloader=testloader, iter=iter + 1)
 
 # -------------------------
 # Run experiment
@@ -167,23 +170,37 @@ if __name__ == "__main__":
     parser.add_argument(
         '--dataset', 
         type=str,
+        default='CIFAR10',
         choices=['CIFAR10', 'CIFAR100'], 
     )
     parser.add_argument(
         '--pooling_method', 
         type=str, 
+        default='max',
         choices=['max', 'avg'],
     )
     parser.add_argument(
         '--model_path', 
         type=str, 
+        required=False,
+    )
+    parser.add_argument(
+        '--sample', 
+        action='store_true',
     )
     args = parser.parse_args()
         
-    model_path = MODEL_PATH + args.model_path
     dataset = args.dataset
     pooling_method = args.pooling_method
-
     trainloader, testloader = get_dataloaders(dataset)
     model = AlexNet(num_classes=NUM_CLASSES_CIFAR10, pooling_method=pooling_method).to(DEVICE)
+
+    if args.sample is True:
+        sample_dense_training(dataset=dataset, trainloader=trainloader, testloader=testloader, pooling_method=pooling_method)
+        quit(0)
+
+    if not args.model_path:
+        args.model_path = initial_dense_train(model, dataset=dataset, trainloader=trainloader, testloader=testloader)
+        
+    model_path = MODEL_PATH + args.model_path
     iterative_prune_train_retrain(model, dataset=dataset, model_path=model_path, trainloader=trainloader, testloader=testloader)
