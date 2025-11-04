@@ -17,12 +17,12 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.ba
 # -------------------------
 CRITERION = nn.CrossEntropyLoss()
 BATCH_SIZE = 128
-INITIAL_TRAIN_EPOCHS = 200        # dense training
-MAX_RETRAIN_EPOCHS = 30               # fine-tune after each pruning
-LEARNING_RATE = .05
+INITIAL_TRAIN_EPOCHS = 100        # dense training
+MAX_RETRAIN_EPOCHS = 100               # fine-tune after each pruning
+LEARNING_RATE = .001
 WEIGHT_DECAY = 1e-4              # L2 regularization (weight decay)
 MOMENTUM = 0.9
-PRUNE_ITERATIONS = 5             # number of prune->retrain cycles
+PRUNE_ITERATIONS = 100             # number of prune->retrain cycles
 ALPHA = 0.1                      # quality parameter to multiply stddev (tunable)
 THRESHOLD = 0.01
 NUM_CLASSES_CIFAR10 = 10
@@ -63,8 +63,7 @@ def train_one_epoch(model, dataloader, optimizer, criterion):
     model.train()
     running_loss = 0.0
     for images, labels in tqdm(dataloader, leave=False):
-        images = images.to(DEVICE)
-        labels = labels.to(DEVICE)
+        images, labels = images.to(DEVICE), labels.to(DEVICE)
         optimizer.zero_grad()
         outputs = model(images)
         loss = criterion(outputs, labels)
@@ -121,10 +120,11 @@ def iterative_prune_train_retrain_conv_layers(model, model_path, dataset, trainl
         pruned_acc = evaluate(model, testloader)
 
         # Retrain conv layers
-        optimizer = optim.SGD(model.parameters(), lr=LEARNING_RATE, momentum=MOMENTUM, weight_decay=WEIGHT_DECAY)
-
+        optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
+        scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=MAX_RETRAIN_EPOCHS)  # match full training duration
         for _ in range(MAX_RETRAIN_EPOCHS):
             retrain_loss = train_one_epoch(model, trainloader, optimizer, CRITERION)
+            scheduler.step()
         retrain_acc = evaluate(model, testloader)
 
         print(f"{prune_iter+1}, {', '.join(f'{sparsity:.4f}' for sparsity in conv_sparsities)}, {base_acc}, {pruned_acc}, {retrain_acc}, {retrain_loss}")
