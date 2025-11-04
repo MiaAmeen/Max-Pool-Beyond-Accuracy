@@ -23,6 +23,7 @@ WEIGHT_DECAY = 1e-4              # L2 regularization (weight decay)
 MOMENTUM = 0.9
 PRUNE_ITERATIONS = 5             # number of prune->retrain cycles
 ALPHA = 0.1                      # quality parameter to multiply stddev (tunable)
+THRESHOLD = 0.01
 NUM_CLASSES_CIFAR10 = 10
 
 # -------------------------
@@ -114,7 +115,7 @@ def iterative_prune_train_retrain(model, model_path, dataset, trainloader, testl
     # --- 2. Iterative pruning + retraining ---
     for prune_iter in range(PRUNE_ITERATIONS):        
         # --- Prune conv layers ---
-        conv_sparsities = [model.prune(layer, quality_param=ALPHA) for layer in model.conv_layers]
+        conv_sparsities = [model.unstructured_l1_prune(layer, threshold=THRESHOLD) for layer in model.conv_layers]
         pruned_acc = evaluate(model, testloader)
 
         # Freeze FC layers during conv retraining

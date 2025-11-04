@@ -54,7 +54,7 @@ class AlexNet(nn.Module):
         x = torch.flatten(x, 1)
         return self.classifier(x)
     
-    def prune(self, layer, quality_param, remove=False):
+    def unstructured_magnitude_prune(self, layer, quality_param, remove=False):
         if prune.is_pruned(layer):
             weights = layer.weight_orig.data
             old_mask = layer.weight_mask.to(dtype=torch.int32)
@@ -62,7 +62,7 @@ class AlexNet(nn.Module):
             weights = layer.weight.data
             old_mask = torch.ones_like(weights, dtype=torch.int32)
 
-        threshold = quality_param * torch.std(weights).item()
+        threshold = float(quality_param * torch.std(weights).item())
         mask = (torch.abs(weights) > threshold).int()
         prune.custom_from_mask(layer, name="weight", mask=mask & old_mask)
         
@@ -70,13 +70,18 @@ class AlexNet(nn.Module):
 
         return self.check_sparsity(layer)
     
+    def unstructured_l1_prune(self, layer, threshold, remove=False):
+        prune.l1_unstructured(layer, name="weight", amount=threshold)
+        if remove: prune.remove(layer, 'weight')
+
+        return self.check_sparsity(layer)
+
     def check_sparsity(self, layer):
         w = layer.weight_mask
         return torch.sum(w == 0) / w.numel()
 
 
-# if __name__ == "__main__":
-#     model = AlexNet()
-#     model.prune(model.conv_layers[0], quality_param=0.5)
-#     print(model.check_sparsity(model.conv_layers[0]))
-#     model.prune(model.conv_layers[0], quality_param=0.5)
+if __name__ == "__main__":
+    model = AlexNet()
+    print(model.unstructured_l1_prune(model.conv_layers[0], threshold=0.5))
+    print(model.unstructured_l1_prune(model.conv_layers[0], threshold=0.5))
