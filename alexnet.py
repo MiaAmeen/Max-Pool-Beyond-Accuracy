@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.utils.prune as prune
+from math import floor
 
 class AlexNet(nn.Module):
     """
@@ -70,18 +71,24 @@ class AlexNet(nn.Module):
 
         return self.check_sparsity(layer)
     
-    def unstructured_l1_prune(self, layer, threshold, remove=False):
+    def l1_unstructured_prune(self, layer, threshold, remove=False):
         prune.l1_unstructured(layer, name="weight", amount=threshold)
         if remove: prune.remove(layer, 'weight')
 
         return self.check_sparsity(layer)
+    
+    def random_unstructured1_prune(self, layer, threshold, remove=False):
+        prune.random_unstructured(layer, name="weight", amount=threshold)
+        if remove: prune.remove(layer, 'weight')
 
+        return self.check_sparsity(layer)
+    
     def check_sparsity(self, layer):
         w = layer.weight_mask
         return torch.sum(w == 0) / w.numel()
 
 
-if __name__ == "__main__":
-    model = AlexNet()
-    print(model.unstructured_l1_prune(model.conv_layers[0], threshold=0.5))
-    print(model.unstructured_l1_prune(model.conv_layers[0], threshold=0.5))
+# if __name__ == "__main__":
+#     model = AlexNet()
+#     print(model.unstructured_l1_prune(model.conv_layers[0], floor(model.conv_layers[0].weight.numel() * 0.1)))
+#     print(model.unstructured_l1_prune(model.conv_layers[0], floor(model.conv_layers[0].weight.numel() * 0.1)))

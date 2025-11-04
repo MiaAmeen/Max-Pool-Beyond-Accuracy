@@ -8,6 +8,7 @@ from torchvision import datasets, transforms
 from tqdm import tqdm
 from alexnet import AlexNet
 import os
+from math import floor
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
 
@@ -51,8 +52,8 @@ def get_dataloaders(dataset, batch_size=BATCH_SIZE, toy_data=False):
         trainset = Subset(trainset, random.sample(range(len(trainset)), 512))
         testset = Subset(testset, random.sample(range(len(testset)), 128))
 
-    trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, num_workers=4, shuffle=True)
-    testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size, num_workers=4, shuffle=False)
+    trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, num_workers=4, shuffle=True, pin_memory=DEVICE.type == "cuda")
+    testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size, num_workers=4, shuffle=False, pin_memory=DEVICE.type == "cuda")
     return trainloader, testloader
 
 # -------------------------
@@ -104,18 +105,49 @@ def initial_dense_train(model, dataset, trainloader, testloader, iter=None):
     return model_path
 
 
-def iterative_prune_train_retrain(model, model_path, dataset, trainloader, testloader):
+def iterative_prune_train_retrain_conv_layers(model, model_path, dataset, trainloader, testloader):
     # Printing Header
-    print("Prune Iteration, conv1, conv2, conv3, conv4, conv5, fc1, fc2, train accuracy, pruned accuracy, retrain accuracy")
+    print("Prune Iteration, conv1, conv2, conv3, conv4, conv5, train accuracy, pruned accuracy, retrain accuracy, retrain loss")
 
     # Load initial dense model
     model.load_state_dict(torch.load(model_path, map_location=DEVICE))
     base_acc = evaluate(model, testloader)
 
     # --- 2. Iterative pruning + retraining ---
+    thresholds = [floor(layer.weight.numel() * THRESHOLD) for layer in model.conv_layers]
     for prune_iter in range(PRUNE_ITERATIONS):        
         # --- Prune conv layers ---
-        conv_sparsities = [model.unstructured_l1_prune(layer, threshold=THRESHOLD) for layer in model.conv_layers]
+        conv_sparsities = [model.l1_unstructured_prune(layer, threshold=thresholds[i]) for i, layer in enumerate(model.conv_layers)]
+        pruned_acc = evaluate(model, testloader)
+
+        # Retrain conv layers
+        optimizer = optim.SGD(model.parameters(), lr=LEARNING_RATE, momentum=MOMENTUM, weight_decay=WEIGHT_DECAY)
+
+        for _ in range(MAX_RETRAIN_EPOCHS):
+            retrain_loss = train_one_epoch(model, trainloader, optimizer, CRITERION)
+        retrain_acc = evaluate(model, testloader)
+
+        print(f"{prune_iter+1}, {', '.join(f'{sparsity:.4f}' for sparsity in conv_sparsities)}, {base_acc}, {pruned_acc}, {retrain_acc}, {retrain_loss}")
+        base_acc = retrain_acc
+
+    torch.save(model.state_dict(), f"prune{model.name}{dataset}{model.pooling_method}.pth")
+    return model
+
+
+def iterative_prune_train_retrain_all_layers(model, model_path, dataset, trainloader, testloader):
+    # Printing Header
+    print("Prune Iteration, conv1, conv2, conv3, conv4, conv5, train accuracy, pruned accuracy, retrain accuracy, retrain loss")
+
+    # Load initial dense model
+    model.load_state_dict(torch.load(model_path, map_location=DEVICE))
+    base_acc = evaluate(model, testloader)
+
+    thresholds = [floor(layer.weights.numel() * THRESHOLD) for layer in model.conv_layers]
+
+    # --- 2. Iterative pruning + retraining ---
+    for prune_iter in range(PRUNE_ITERATIONS):        
+        # --- Prune conv layers ---
+        conv_sparsities = [model.l1_unstructured_prune(layer, threshold=thresholds[i]) for i, layer in enumerate(model.conv_layers)]
         pruned_acc = evaluate(model, testloader)
 
         # Freeze FC layers during conv retraining
@@ -133,7 +165,7 @@ def iterative_prune_train_retrain(model, model_path, dataset, trainloader, testl
             train_one_epoch(model, trainloader, optimizer, CRITERION)
 
         # --- Prune FC layers ---
-        fc_sparsities = [model.prune(layer, quality_param=ALPHA) for layer in model.fc_layers]
+        fc_sparsities = [model.unstructured_magnitude_prune(layer, quality_param=ALPHA) for layer in model.fc_layers]
 
         # Freeze conv layers during FC retraining
         for layer in model.conv_layers:
@@ -147,11 +179,11 @@ def iterative_prune_train_retrain(model, model_path, dataset, trainloader, testl
 
         # Retrain FC layers
         for _ in range(MAX_RETRAIN_EPOCHS):
-            train_one_epoch(model, trainloader, optimizer, CRITERION)
+            retrain_loss = train_one_epoch(model, trainloader, optimizer, CRITERION)
 
         retrain_acc = evaluate(model, testloader)
 
-        print(f"{prune_iter+1}, {', '.join(f'{sparsity:.4f}' for sparsity in conv_sparsities)}, {', '.join(f'{sparsity:.4f}' for sparsity in fc_sparsities)}, {base_acc}, {pruned_acc}, {retrain_acc}")
+        print(f"{prune_iter+1}, {', '.join(f'{sparsity:.4f}' for sparsity in conv_sparsities)}, {', '.join(f'{sparsity:.4f}' for sparsity in fc_sparsities)}, {base_acc}, {pruned_acc}, {retrain_acc}, {retrain_loss}")
         
         base_acc = retrain_acc
 
@@ -204,4 +236,4 @@ if __name__ == "__main__":
         args.model_path = initial_dense_train(model, dataset=dataset, trainloader=trainloader, testloader=testloader)
         
     model_path = MODEL_PATH + args.model_path
-    iterative_prune_train_retrain(model, dataset=dataset, model_path=model_path, trainloader=trainloader, testloader=testloader)
+    iterative_prune_train_retrain_conv_layers(model, dataset=dataset, model_path=model_path, trainloader=trainloader, testloader=testloader)
