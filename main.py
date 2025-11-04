@@ -130,7 +130,8 @@ def iterative_prune_train_retrain_conv_layers(model, model_path, dataset, trainl
         print(f"{prune_iter+1}, {', '.join(f'{sparsity:.4f}' for sparsity in conv_sparsities)}, {base_acc}, {pruned_acc}, {retrain_acc}, {retrain_loss}")
         base_acc = retrain_acc
 
-    torch.save(model.state_dict(), f"prune{model.name}{dataset}{model.pooling_method}.pth")
+        torch.save(model.state_dict(), f"prune{model.name}{dataset}{model.pooling_method}.pth")
+        
     return model
 
 
