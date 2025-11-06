@@ -246,6 +246,6 @@ if __name__ == "__main__":
         # iterative_prune_train_retrain_conv_layer(model, dataset=dataset, model_path=model_path, conv_idx=conv_idx, trainloader=trainloader, testloader=testloader)
 
     if args.conv_idx is not None: 
-        conv_idx = args.conv_idx
+        conv_idx = args.conv_idx - 1
         model_path = MODEL_PATH + args.model_path
         iterative_prune_train_retrain_conv_layer(model, dataset=dataset, model_path=model_path, conv_idx=conv_idx, trainloader=trainloader, testloader=testloader)
