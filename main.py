@@ -31,10 +31,10 @@ NUM_CLASSES_CIFAR10 = 10
 # -------------------------
 # Data (CIFAR-10)
 # -------------------------
-# DATA_PATH = "/share/csc591007f25/fameen/MaxPooling/data/"
-DATA_PATH = "./data/"
-# MODEL_PATH = "/share/csc591007f25/fameen/MaxPooling/models/"
-MODEL_PATH = "./models/"
+DATA_PATH = "/share/csc591007f25/fameen/MaxPooling/data/"
+# DATA_PATH = "./data/"
+MODEL_PATH = "/share/csc591007f25/fameen/MaxPooling/models/"
+# MODEL_PATH = "./models/"
 def get_dataloaders(dataset, batch_size=BATCH_SIZE, toy_data=False):
     transform = transforms.Compose([
         transforms.ToTensor(),
@@ -111,6 +111,7 @@ def iterative_prune_train_retrain_conv_layer(model, model_path, conv_idx, datase
 
     # Load initial dense model
     model.load_state_dict(torch.load(model_path, map_location=DEVICE))
+    model_version = args.model_path[4]
     base_acc = evaluate(model, testloader)
 
     # --- 2. Iterative pruning + retraining ---
@@ -132,7 +133,7 @@ def iterative_prune_train_retrain_conv_layer(model, model_path, conv_idx, datase
         print(f"{prune_iter+1}, {conv_sparsity}, {base_acc}, {pruned_acc}, {retrain_acc}, {retrain_loss}")
         base_acc = retrain_acc
 
-        torch.save(model.state_dict(), f"pruneConv{conv_idx}{model.name}{dataset}{model.pooling_method}.pth")
+        torch.save(model.state_dict(), f"{model_version}{model.name}{dataset}conv{conv_idx}{model.pooling_method}.pth")
 
     return model
 
