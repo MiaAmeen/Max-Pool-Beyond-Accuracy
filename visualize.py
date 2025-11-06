@@ -1,64 +1,103 @@
 import matplotlib.pyplot as plt
 import csv
-from io import StringIO
+import numpy as np
 
 OUTPUT_DIR = "results/"
+AVG_POOL_RESULTS_FILE = OUTPUT_DIR + 'initAlexNetCIFAR10avg.csv'
+MAX_POOL_RESULTS_FILE = OUTPUT_DIR + 'initAlexNetCIFAR10max.csv'
 
-def plot_initial_dense_train_accuracy_over_epochs(out_name, data_content):
-    """
-    Parses data from a CSV-like string content and plots the training and test accuracy.
-    Assumes the columns are: Epoch, Loss, Train Acc, Test Acc.
-    """
-    epochs = []
-    train_acc = []
-    test_acc = []
+# Max: best performing seeds are 14, 10, 3, 2, 0, average accuracy ~ 86%
+# Avg: best performing seeds are 16, 5, 8, 4, 2,  average accuracy = 85.072%
+def plot_initial_dense_train_accuracy_over_epochs(out_name,
+                                                  avgpoolresultsfile=AVG_POOL_RESULTS_FILE,
+                                                  maxpoolresultsfile=MAX_POOL_RESULTS_FILE):
 
-    # Use StringIO to treat the string content like a file
-    csvfile = StringIO(data_content)
-    reader = csv.reader(csvfile, skipinitialspace=True)
-    
-    # Skip header
-    next(reader)
+    def load_results(path):
+        train_accs = {}
+        test_accs = {}
+        with open(path, 'r') as f:
+            reader = csv.reader(f)
+            next(reader)
+            for row in reader:
+                if int(row[0]) > 15: continue
+                epoch = int(row[1].split('/')[0])
+                train_acc = float(row[3])
+                test_acc = float(row[4])
+                if epoch not in train_accs:
+                    train_accs[epoch] = []
+                    test_accs[epoch] = []
+                train_accs[epoch].append(train_acc)
+                test_accs[epoch].append(test_acc)
+        return train_accs, test_accs
 
-    for row in reader:
-        epoch = int(row[0].split('/')[0])
-        t_acc = float(row[2])
-        ts_acc = float(row[3])
-        
-        epochs.append(epoch)
-        train_acc.append(t_acc)
-        test_acc.append(ts_acc)
+    avg_train, avg_test = load_results(avgpoolresultsfile)
+    max_train, max_test = load_results(maxpoolresultsfile)
+    epochs = [i for i in range(1, 101)]
 
-    # --- Plotting ---
-    plt.figure(figsize=(10, 6))
-    plt.plot(epochs, train_acc, label='Training Accuracy', marker='o', linestyle='-', linewidth=2)
-    plt.plot(epochs, test_acc, label='Validation/Test Accuracy', marker='x', linestyle='--', linewidth=2)
-    plt.title('AlexNet Accuracy Over Training Epochs (CIFAR-10)', fontsize=16)
-    plt.xlabel('Epoch', fontsize=12)
-    plt.ylabel('Accuracy (%)', fontsize=12)
-    plt.grid(True, linestyle=':', alpha=0.7)
-    plt.legend(loc='lower right', fontsize=10)
-    plt.ylim(min(train_acc + test_acc) * 0.95, 100) # Ensure y-axis starts near the data
-    max_epoch = max(epochs)
-    tick_interval = 50
-    tick_marks = list(range(0, max_epoch + tick_interval, tick_interval))
-    if max_epoch not in tick_marks:
-        tick_marks.append(max_epoch)
-        tick_marks.sort()
-    plt.xticks(tick_marks)
-    
-    # Add a conversational label for the divergence point
-    # We use a placeholder for now, but this is where you'd analyze overfitting
-    plt.text(epochs[-1] - 5, test_acc[-1] - 1, 'Test Accuracy Plateau', 
-             fontsize=9, color='red', horizontalalignment='right')
-    
+    def compute_mean_sem(acc_dict):
+        means = []
+        sems = []
+        for epoch in epochs:
+            vals = np.array(acc_dict[epoch])
+            means.append(vals.mean())
+            sems.append(vals.std(ddof=1) / np.sqrt(len(vals)))
+        return np.array(means), np.array(sems)
+
+    avg_train_mean, avg_train_sem = compute_mean_sem(avg_train)
+    avg_test_mean, avg_test_sem = compute_mean_sem(avg_test)
+    max_train_mean, max_train_sem = compute_mean_sem(max_train)
+    max_test_mean, max_test_sem = compute_mean_sem(max_test)
+
+
+    plt.figure(figsize=(11, 7))
+    avg_color = "tab:blue"
+    max_color = "tab:orange"
+
+    # --- AvgPool ---
+    plt.plot(epochs, avg_test_mean, label="AvgPool – Test", color=avg_color, linewidth=2)
+    plt.fill_between(epochs,
+                     avg_test_mean - avg_test_sem,
+                     avg_test_mean + avg_test_sem,
+                     color=avg_color,
+                     alpha=0.5)
+
+    plt.plot(epochs, avg_train_mean, label="AvgPool – Train", color=avg_color, linestyle="--", linewidth=2)
+    plt.fill_between(epochs,
+                     avg_train_mean - avg_train_sem,
+                     avg_train_mean + avg_train_sem,
+                     color=avg_color,
+                     alpha=0.5)
+
+    # --- MaxPool ---
+    plt.plot(epochs, max_test_mean, label="MaxPool – Test", color=max_color, linewidth=2)
+    plt.fill_between(epochs,
+                     max_test_mean - max_test_sem,
+                     max_test_mean + max_test_sem,
+                     color=max_color,
+                     alpha=0.5)
+
+    plt.plot(epochs, max_train_mean, label="MaxPool – Train", color=max_color, linestyle="--", linewidth=2)
+    plt.fill_between(epochs,
+                     max_train_mean - max_train_sem,
+                     max_train_mean + max_train_sem,
+                     color=max_color,
+                     alpha=0.5)
+
+    # --- Formatting ---
+    plt.title("AlexNet CIFAR-10 Accuracy\nMean ± Standard Error Across 15 Seeds", fontsize=15)
+    plt.xlabel("Epoch", fontsize=12)
+    plt.ylabel("Accuracy (%)", fontsize=12)
+    plt.grid(True, linestyle=':', alpha=0.6)
+    plt.legend(fontsize=10, loc="lower right")
+
     plt.tight_layout()
     plt.savefig(out_name)
-    print(f"Plot successfully saved to {out_name}")
-    plt.show() # Display the plot
+    plt.show()
+
+    print(f"Saved plot → {out_name}")
 
 
 if __name__ == "__main__":
-    with open(OUTPUT_DIR + 'initAlexNetCIFAR10avg.csv', 'r') as f:
-        data_content = f.read()
-        plot_initial_dense_train_accuracy_over_epochs(OUTPUT_DIR + "plots/initAlexNetCIFAR10avg.png", data_content)
+    plot_initial_dense_train_accuracy_over_epochs(
+        OUTPUT_DIR + "plots/initAlexNetCIFAR10avgVSmax.png"
+    )

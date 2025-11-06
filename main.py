@@ -19,7 +19,8 @@ CRITERION = nn.CrossEntropyLoss()
 BATCH_SIZE = 128
 INITIAL_TRAIN_EPOCHS = 100        # dense training
 MAX_RETRAIN_EPOCHS = 100               # fine-tune after each pruning
-LEARNING_RATE = .001
+LR = .001
+RETRAIN_LR = 0.0005
 WEIGHT_DECAY = 1e-4              # L2 regularization (weight decay)
 MOMENTUM = 0.9
 PRUNE_ITERATIONS = 100             # number of prune->retrain cycles
@@ -88,7 +89,7 @@ def evaluate(model, dataloader):
 
 
 def initial_dense_train(model, dataset, trainloader, testloader, iter=None):
-    optimizer = optim.SGD(model.parameters(), lr=LEARNING_RATE, momentum=MOMENTUM, weight_decay=WEIGHT_DECAY)
+    optimizer = optim.SGD(model.parameters(), lr=LR, momentum=MOMENTUM, weight_decay=WEIGHT_DECAY)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=INITIAL_TRAIN_EPOCHS)  # match full training duration
 
     print("ITER, Epoch, Loss, Train Acc, Test Acc")
@@ -104,34 +105,35 @@ def initial_dense_train(model, dataset, trainloader, testloader, iter=None):
     return model_path
 
 
-def iterative_prune_train_retrain_conv_layers(model, model_path, dataset, trainloader, testloader):
-    # Printing Header
-    print("Prune Iteration, conv1, conv2, conv3, conv4, conv5, train accuracy, pruned accuracy, retrain accuracy, retrain loss")
+def iterative_prune_train_retrain_conv_layer(model, model_path, conv_idx, dataset, trainloader, testloader):
+    # Printing Header3
+    print(f"Prune Iteration, conv{conv_idx}, train accuracy, pruned accuracy, retrain accuracy, retrain loss")
 
     # Load initial dense model
     model.load_state_dict(torch.load(model_path, map_location=DEVICE))
     base_acc = evaluate(model, testloader)
 
     # --- 2. Iterative pruning + retraining ---
-    thresholds = [floor(layer.weight.numel() * THRESHOLD) for layer in model.conv_layers]
+    layer = model.conv_layers[conv_idx]
+    threshold = floor(layer.weight.numel() * THRESHOLD)
     for prune_iter in range(PRUNE_ITERATIONS):        
         # --- Prune conv layers ---
-        conv_sparsities = [model.l1_unstructured_prune(layer, threshold=thresholds[i]) for i, layer in enumerate(model.conv_layers)]
+        conv_sparsity = model.l1_unstructured_prune(layer, threshold)
         pruned_acc = evaluate(model, testloader)
 
         # Retrain conv layers
-        optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
+        optimizer = optim.Adam(model.parameters(), lr=RETRAIN_LR)
         scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=MAX_RETRAIN_EPOCHS)  # match full training duration
         for _ in range(MAX_RETRAIN_EPOCHS):
             retrain_loss = train_one_epoch(model, trainloader, optimizer, CRITERION)
             scheduler.step()
         retrain_acc = evaluate(model, testloader)
 
-        print(f"{prune_iter+1}, {', '.join(f'{sparsity:.4f}' for sparsity in conv_sparsities)}, {base_acc}, {pruned_acc}, {retrain_acc}, {retrain_loss}")
+        print(f"{prune_iter+1}, {conv_sparsity}, {base_acc}, {pruned_acc}, {retrain_acc}, {retrain_loss}")
         base_acc = retrain_acc
 
-        torch.save(model.state_dict(), f"prune{model.name}{dataset}{model.pooling_method}.pth")
-        
+        torch.save(model.state_dict(), f"pruneConv{conv_idx}{model.name}{dataset}{model.pooling_method}.pth")
+
     return model
 
 
@@ -159,7 +161,7 @@ def iterative_prune_train_retrain_all_layers(model, model_path, dataset, trainlo
             for param in layer.parameters():
                 param.requires_grad = True
         optimizer = optim.SGD(filter(lambda p: p.requires_grad, model.parameters()),
-                              lr=LEARNING_RATE, momentum=MOMENTUM, weight_decay=WEIGHT_DECAY)
+                              lr=RETRAIN_LR, momentum=MOMENTUM, weight_decay=WEIGHT_DECAY)
 
         # Retrain conv layers
         for _ in range(MAX_RETRAIN_EPOCHS):
@@ -176,7 +178,7 @@ def iterative_prune_train_retrain_all_layers(model, model_path, dataset, trainlo
             for param in layer.parameters():
                 param.requires_grad = True
         optimizer = optim.SGD(filter(lambda p: p.requires_grad, model.parameters()),
-                              lr=LEARNING_RATE, momentum=MOMENTUM, weight_decay=WEIGHT_DECAY)
+                              lr=RETRAIN_LR, momentum=MOMENTUM, weight_decay=WEIGHT_DECAY)
 
         # Retrain FC layers
         for _ in range(MAX_RETRAIN_EPOCHS):
@@ -214,6 +216,11 @@ if __name__ == "__main__":
         choices=['max', 'avg'],
     )
     parser.add_argument(
+        '--conv_idx', 
+        type=int, 
+        required=False,
+    )
+    parser.add_argument(
         '--model_path', 
         type=str, 
         required=False,
@@ -234,7 +241,10 @@ if __name__ == "__main__":
         quit(0)
 
     if not args.model_path:
-        args.model_path = initial_dense_train(model, dataset=dataset, trainloader=trainloader, testloader=testloader)
-        
-    model_path = MODEL_PATH + args.model_path
-    iterative_prune_train_retrain_conv_layers(model, dataset=dataset, model_path=model_path, trainloader=trainloader, testloader=testloader)
+        model_path = initial_dense_train(model, dataset=dataset, trainloader=trainloader, testloader=testloader)
+        # iterative_prune_train_retrain_conv_layer(model, dataset=dataset, model_path=model_path, conv_idx=conv_idx, trainloader=trainloader, testloader=testloader)
+
+    if args.conv_idx is not None: 
+        conv_idx = args.conv_idx
+        model_path = MODEL_PATH + args.model_path
+        iterative_prune_train_retrain_conv_layer(model, dataset=dataset, model_path=model_path, conv_idx=conv_idx, trainloader=trainloader, testloader=testloader)
