@@ -63,7 +63,7 @@ def get_dataloaders(dataset, batch_size=BATCH_SIZE, toy_data=False):
 def train_one_epoch(model, dataloader, optimizer, criterion):
     model.train()
     running_loss = 0.0
-    for images, labels in tqdm(dataloader, leave=False):
+    for images, labels in dataloader:
         images, labels = images.to(DEVICE), labels.to(DEVICE)
         optimizer.zero_grad()
         outputs = model(images)
@@ -111,7 +111,7 @@ def iterative_prune_train_retrain_conv_layer(model, model_path, conv_idx, datase
 
     # Load initial dense model
     model.load_state_dict(torch.load(model_path, map_location=DEVICE))
-    model_version = args.model_path[4]
+    # model_version = args.model_path[4]
     base_acc = evaluate(model, testloader)
 
     # --- 2. Iterative pruning + retraining ---
@@ -133,7 +133,7 @@ def iterative_prune_train_retrain_conv_layer(model, model_path, conv_idx, datase
         print(f"{prune_iter+1}, {conv_sparsity}, {base_acc}, {pruned_acc}, {retrain_acc}, {retrain_loss}")
         base_acc = retrain_acc
 
-        torch.save(model.state_dict(), f"{model_version}{model.name}{dataset}conv{conv_idx}{model.pooling_method}.pth")
+    # torch.save(model.state_dict(), f"{model_version}{model.name}{dataset}conv{conv_idx}{model.pooling_method}.pth")
 
     return model
 
