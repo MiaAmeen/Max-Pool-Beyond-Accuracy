@@ -20,12 +20,12 @@ BATCH_SIZE = 128
 INITIAL_TRAIN_EPOCHS = 100        # dense training
 MAX_RETRAIN_EPOCHS = 100               # fine-tune after each pruning
 LR = .001
-RETRAIN_LR = 0.0005
+RETRAIN_LR = 0.0001
 WEIGHT_DECAY = 1e-4              # L2 regularization (weight decay)
 MOMENTUM = 0.9
 PRUNE_ITERATIONS = 100             # number of prune->retrain cycles
 ALPHA = 0.1                      # quality parameter to multiply stddev (tunable)
-THRESHOLD = 0.01
+THRESHOLD = 0.05
 NUM_CLASSES_CIFAR10 = 10
 
 # -------------------------
@@ -85,7 +85,7 @@ def evaluate(model, dataloader):
         predicted = outputs.argmax(dim=1)
         correct += (predicted == labels).sum().item()
         total += labels.size(0)
-    return 100.0 * correct / total
+    return round(100.0 * correct / total, 4)
 
 
 def initial_dense_train(model, dataset, trainloader, testloader, iter=None):
@@ -123,7 +123,7 @@ def iterative_prune_train_retrain_conv_layer(model, model_path, conv_idx, datase
         pruned_acc = evaluate(model, testloader)
 
         # Retrain conv layers
-        optimizer = optim.Adam(model.parameters(), lr=RETRAIN_LR)
+        optimizer = optim.Adam(model.parameters(), lr=RETRAIN_LR, weight_decay=WEIGHT_DECAY)
         scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=MAX_RETRAIN_EPOCHS)  # match full training duration
         for _ in range(MAX_RETRAIN_EPOCHS):
             retrain_loss = train_one_epoch(model, trainloader, optimizer, CRITERION)
@@ -134,7 +134,6 @@ def iterative_prune_train_retrain_conv_layer(model, model_path, conv_idx, datase
         base_acc = retrain_acc
 
     # torch.save(model.state_dict(), f"{model_version}{model.name}{dataset}conv{conv_idx}{model.pooling_method}.pth")
-
     return model
 
 
