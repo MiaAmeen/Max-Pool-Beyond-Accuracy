@@ -112,7 +112,7 @@ def iterative_prune_train_retrain_conv_layer(model, model_path, conv_idx, datase
 
     # Load initial dense model
     model.load_state_dict(torch.load(model_path, map_location=DEVICE))
-    # model_version = args.model_path[4] 
+    # model_version = args.model_path[4]
     base_acc = evaluate(model, testloader)
 
     # --- 2. Iterative pruning + retraining ---
