@@ -31,10 +31,10 @@ NUM_CLASSES_CIFAR10 = 10
 # -------------------------
 # Data (CIFAR-10)
 # -------------------------
-DATA_PATH = "/share/csc591007f25/fameen/MaxPooling/data/"
-# DATA_PATH = "./data/"
-MODEL_PATH = "/share/csc591007f25/fameen/MaxPooling/models/"
-# MODEL_PATH = "./models/"
+# DATA_PATH = "/share/csc591007f25/fameen/MaxPooling/data/"
+DATA_PATH = "./data/"
+# MODEL_PATH = "/share/csc591007f25/fameen/MaxPooling/models/"
+MODEL_PATH = "./models/"
 def get_dataloaders(dataset, batch_size=BATCH_SIZE, toy_data=False):
     transform = transforms.Compose([
         transforms.ToTensor(),
@@ -117,7 +117,9 @@ def iterative_prune_train_retrain_conv_layer(model, model_path, conv_idx, datase
     # --- 2. Iterative pruning + retraining ---
     layer = model.conv_layers[conv_idx]
     threshold = floor(layer.weight.numel() * THRESHOLD)
-    for prune_iter in range(PRUNE_ITERATIONS):        
+    for prune_iter in range(PRUNE_ITERATIONS): 
+        if layer.nume
+
         # --- Prune conv layers ---
         conv_sparsity = model.l1_unstructured_prune(layer, threshold)
         pruned_acc = evaluate(model, testloader)
@@ -194,7 +196,7 @@ def iterative_prune_train_retrain_all_layers(model, model_path, dataset, trainlo
     return model
 
 def sample_dense_training(dataset, trainloader, testloader, pooling_method):
-    for iter in range(20):
+    for iter in range(15):
         model = AlexNet(num_classes=NUM_CLASSES_CIFAR10, pooling_method=pooling_method).to(DEVICE)
         initial_dense_train(model, dataset=dataset, trainloader=trainloader, testloader=testloader, iter=iter + 1)
 
@@ -213,7 +215,7 @@ if __name__ == "__main__":
         '--pooling_method', 
         type=str, 
         default='max',
-        choices=['max', 'avg'],
+        choices=['max', 'min', 'avg'],
     )
     parser.add_argument(
         '--conv_idx', 
@@ -234,12 +236,12 @@ if __name__ == "__main__":
     dataset = args.dataset
     pooling_method = args.pooling_method
     trainloader, testloader = get_dataloaders(dataset)
-    model = AlexNet(num_classes=NUM_CLASSES_CIFAR10, pooling_method=pooling_method).to(DEVICE)
 
     if args.sample is True:
         sample_dense_training(dataset=dataset, trainloader=trainloader, testloader=testloader, pooling_method=pooling_method)
         quit(0)
 
+    model = AlexNet(num_classes=NUM_CLASSES_CIFAR10, pooling_method=pooling_method).to(DEVICE)
     if not args.model_path:
         model_path = initial_dense_train(model, dataset=dataset, trainloader=trainloader, testloader=testloader)
         # iterative_prune_train_retrain_conv_layer(model, dataset=dataset, model_path=model_path, conv_idx=conv_idx, trainloader=trainloader, testloader=testloader)

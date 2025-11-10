@@ -1,7 +1,14 @@
 import torch
 import torch.nn as nn
 import torch.nn.utils.prune as prune
-from math import floor
+
+class MinPool2d(nn.Module):
+    def __init__(self, kernel_size, stride=None, padding=0):
+        super().__init__()
+        self.maxpool = nn.MaxPool2d(kernel_size, stride=stride, padding=padding)
+
+    def forward(self, x):
+        return -self.maxpool(-x)
 
 class AlexNet(nn.Module):
     """
@@ -15,6 +22,8 @@ class AlexNet(nn.Module):
 
         if pooling_method == "max":
             pool_layer = nn.MaxPool2d
+        elif pooling_method == "min":
+            pool_layer = MinPool2d
         else:
             pool_layer = nn.AvgPool2d
 
