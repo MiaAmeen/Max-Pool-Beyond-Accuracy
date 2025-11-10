@@ -2,6 +2,7 @@ import argparse
 import random
 import torch
 import torch.nn as nn
+import torch.nn.utils.prune as prune
 import torch.optim as optim
 from torch.utils.data import Subset
 from torchvision import datasets, transforms
@@ -118,7 +119,7 @@ def iterative_prune_train_retrain_conv_layer(model, model_path, conv_idx, datase
     layer = model.conv_layers[conv_idx]
     threshold = floor(layer.weight.numel() * THRESHOLD)
     for prune_iter in range(PRUNE_ITERATIONS): 
-        if layer.weight_mask.numel() < threshold: break
+        if prune.is_pruned(layer) and layer.weight_mask.numel() < threshold: break
 
         # --- Prune conv layers ---
         conv_sparsity = model.l1_unstructured_prune(layer, threshold)
