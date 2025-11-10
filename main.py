@@ -118,7 +118,7 @@ def iterative_prune_train_retrain_conv_layer(model, model_path, conv_idx, datase
     layer = model.conv_layers[conv_idx]
     threshold = floor(layer.weight.numel() * THRESHOLD)
     for prune_iter in range(PRUNE_ITERATIONS): 
-        if layer.nume
+        if layer.weight_mask.numel() < threshold: break
 
         # --- Prune conv layers ---
         conv_sparsity = model.l1_unstructured_prune(layer, threshold)
