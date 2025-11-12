@@ -106,7 +106,7 @@ def initial_dense_train(model, dataset, trainloader, testloader, iter=None):
     return model_path
 
 
-def iterative_prune_train_retrain_conv_layer(model, model_path, conv_idx, dataset, trainloader, testloader):
+def iterative_prune_train_retrain_conv_layer(model, model_path, conv_idx, trainloader, testloader):
     # Printing Header3
     print(f"Prune Iteration, conv{conv_idx}, train accuracy, pruned accuracy, retrain accuracy, retrain loss")
 
@@ -117,12 +117,16 @@ def iterative_prune_train_retrain_conv_layer(model, model_path, conv_idx, datase
 
     # --- 2. Iterative pruning + retraining ---
     layer = model.conv_layers[conv_idx]
-    threshold = floor(layer.weight.numel() * THRESHOLD)
+    if "unstr" not in model.pruning_method:
+        threshold = 1 / layer.weight.shape[0]
+    else:
+        threshold = floor(layer.weight.numel() * THRESHOLD)
+
     for prune_iter in range(PRUNE_ITERATIONS): 
         if prune.is_pruned(layer) and layer.weight_mask.numel() < threshold: break
 
         # --- Prune conv layers ---
-        conv_sparsity = model.l1_unstructured_prune(layer, threshold)
+        conv_sparsity = model.prune(layer, threshold)
         pruned_acc = evaluate(model, testloader)
 
         # Retrain conv layers
@@ -153,7 +157,7 @@ def iterative_prune_train_retrain_all_layers(model, model_path, dataset, trainlo
     # --- 2. Iterative pruning + retraining ---
     for prune_iter in range(PRUNE_ITERATIONS):        
         # --- Prune conv layers ---
-        conv_sparsities = [model.l1_unstructured_prune(layer, threshold=thresholds[i]) for i, layer in enumerate(model.conv_layers)]
+        conv_sparsities = [model.prune(layer, threshold=thresholds[i]) for i, layer in enumerate(model.conv_layers)]
         pruned_acc = evaluate(model, testloader)
 
         # Freeze FC layers during conv retraining
@@ -219,6 +223,12 @@ if __name__ == "__main__":
         choices=['max', 'min', 'avg'],
     )
     parser.add_argument(
+        '--pruning_method', 
+        type=str, 
+        default='unstr',
+        choices=['unstr', 'str', 'rand-unstr', 'rand-str'],
+    )
+    parser.add_argument(
         '--conv_idx', 
         type=int, 
         required=False,
@@ -236,13 +246,14 @@ if __name__ == "__main__":
         
     dataset = args.dataset
     pooling_method = args.pooling_method
+    pruning_method = args.pruning_method
     trainloader, testloader = get_dataloaders(dataset)
 
     if args.sample is True:
         sample_dense_training(dataset=dataset, trainloader=trainloader, testloader=testloader, pooling_method=pooling_method)
         quit(0)
 
-    model = AlexNet(num_classes=NUM_CLASSES_CIFAR10, pooling_method=pooling_method).to(DEVICE)
+    model = AlexNet(num_classes=NUM_CLASSES_CIFAR10, pooling_method=pooling_method, pruning_method=pruning_method).to(DEVICE)
     if not args.model_path:
         model_path = initial_dense_train(model, dataset=dataset, trainloader=trainloader, testloader=testloader)
         # iterative_prune_train_retrain_conv_layer(model, dataset=dataset, model_path=model_path, conv_idx=conv_idx, trainloader=trainloader, testloader=testloader)
@@ -250,4 +261,4 @@ if __name__ == "__main__":
     if args.conv_idx is not None: 
         conv_idx = args.conv_idx - 1
         model_path = MODEL_PATH + args.model_path
-        iterative_prune_train_retrain_conv_layer(model, dataset=dataset, model_path=model_path, conv_idx=conv_idx, trainloader=trainloader, testloader=testloader)
+        iterative_prune_train_retrain_conv_layer(model, model_path=model_path, conv_idx=conv_idx, trainloader=trainloader, testloader=testloader)
