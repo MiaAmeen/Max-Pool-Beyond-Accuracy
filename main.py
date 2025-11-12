@@ -227,6 +227,7 @@ if __name__ == "__main__":
         type=str, 
         default='unstr',
         choices=['unstr', 'str', 'rand-unstr', 'rand-str'],
+        required=False
     )
     parser.add_argument(
         '--conv_idx', 
@@ -246,7 +247,7 @@ if __name__ == "__main__":
         
     dataset = args.dataset
     pooling_method = args.pooling_method
-    pruning_method = args.pruning_method
+    pruning_method = args.pruning_method if args.pruning_method else "str"
     trainloader, testloader = get_dataloaders(dataset)
 
     if args.sample is True:
