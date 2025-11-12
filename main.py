@@ -108,7 +108,7 @@ def initial_dense_train(model, dataset, trainloader, testloader, iter=None):
 
 def iterative_prune_train_retrain_conv_layer(model, model_path, conv_idx, trainloader, testloader):
     # Printing Header3
-    print(f"Prune Iteration, conv{conv_idx}, train accuracy, pruned accuracy, retrain accuracy, retrain loss")
+    print(f"model version, pooling method, pruning method, prune iteration, conv_layer, sparsity, train accuracy, pruned accuracy, retrain accuracy, retrain loss")
 
     # Load initial dense model
     model.load_state_dict(torch.load(model_path, map_location=DEVICE))
@@ -137,7 +137,7 @@ def iterative_prune_train_retrain_conv_layer(model, model_path, conv_idx, trainl
             scheduler.step()
         retrain_acc = evaluate(model, testloader)
 
-        print(f"{prune_iter+1}, {conv_sparsity}, {base_acc}, {pruned_acc}, {retrain_acc}, {retrain_loss}")
+        print(f"{model_path[4]}, {model.pooling_method}, {model.pruning_method}, {prune_iter+1}, conv{conv_idx}, {conv_sparsity}, {base_acc}, {pruned_acc}, {retrain_acc}, {retrain_loss}")
         base_acc = retrain_acc
 
     # torch.save(model.state_dict(), f"{model_version}{model.name}{dataset}conv{conv_idx}{model.pooling_method}.pth")

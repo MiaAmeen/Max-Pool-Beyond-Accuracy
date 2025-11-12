@@ -19,7 +19,6 @@ class AlexNet(nn.Module):
         super(AlexNet, self).__init__()
         self.name = "AlexNet"
         self.pooling_method = pooling_method
-
         if pooling_method == "max":
             pool_layer = nn.MaxPool2d
         elif pooling_method == "min":
@@ -27,6 +26,7 @@ class AlexNet(nn.Module):
         else:
             pool_layer = nn.AvgPool2d
 
+        self.pruning_method = pruning_method
         self.prune = self.l1_unstructured_prune
         match pruning_method:
             case "rand-unstr":
