@@ -117,11 +117,11 @@ def iterative_prune_train_retrain_conv_layer(model, model_path, conv_idx, trainl
 
     # --- 2. Iterative pruning + retraining ---
     layer = model.conv_layers[conv_idx]
-    unstructured = "unstr" in model.pruning_method
-    threshold = 1 if unstructured else floor(layer.weight.numel() * THRESHOLD)
+    structured = "str" in model.pruning_method
+    threshold = 1 if structured else floor(layer.weight.numel() * THRESHOLD)
 
     for prune_iter in range(PRUNE_ITERATIONS): 
-        if not unstructured and prune.is_pruned(layer) and layer.weight_mask.numel() < threshold: break
+        if not structured and prune.is_pruned(layer) and layer.weight_mask.numel() < threshold: break
 
         # --- Prune conv layers ---
         conv_sparsity = model.prune(layer, threshold)
