@@ -217,18 +217,18 @@ if __name__ == "__main__":
     parser.add_argument(
         '--pooling_method', 
         type=str, 
-        default='max',
+        default='avg',
         choices=['max', 'min', 'avg'],
     )
     parser.add_argument(
         '--pruning_method', 
         type=str, 
-        default='unstr',
+        default='str',
         choices=['unstr', 'str', 'rand-unstr', 'rand-str'],
         required=False
     )
     parser.add_argument(
-        '--conv_idx', 
+        '--conv_idx',
         type=int, 
         required=False,
     )
@@ -245,7 +245,7 @@ if __name__ == "__main__":
         
     dataset = args.dataset
     pooling_method = args.pooling_method
-    pruning_method = args.pruning_method if args.pruning_method else "str"
+    pruning_method = args.pruning_method
     trainloader, testloader = get_dataloaders(dataset)
 
     if args.sample is True:
