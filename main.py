@@ -32,10 +32,10 @@ NUM_CLASSES_CIFAR10 = 10
 # -------------------------
 # Data (CIFAR-10)
 # -------------------------
-# DATA_PATH = "/share/csc591007f25/fameen/MaxPooling/data/"
-DATA_PATH = "./data/"
-# MODEL_PATH = "/share/csc591007f25/fameen/MaxPooling/models/"
-MODEL_PATH = "./models/"
+DATA_PATH = "/share/csc591007f25/fameen/MaxPooling/data/"
+# DATA_PATH = "./data/"
+MODEL_PATH = "/share/csc591007f25/fameen/MaxPooling/models/"
+# MODEL_PATH = "./models/"
 def get_dataloaders(dataset, batch_size=BATCH_SIZE, toy_data=False):
     transform = transforms.Compose([
         transforms.ToTensor(),
