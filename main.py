@@ -112,18 +112,16 @@ def iterative_prune_train_retrain_conv_layer(model, model_path, conv_idx, trainl
 
     # Load initial dense model
     model.load_state_dict(torch.load(model_path, map_location=DEVICE))
-    # model_version = args.model_path[4]
+    model_version = model_path.split("/")[-1][4]
     base_acc = evaluate(model, testloader)
 
     # --- 2. Iterative pruning + retraining ---
     layer = model.conv_layers[conv_idx]
-    if "unstr" not in model.pruning_method:
-        threshold = 1 / layer.weight.shape[0]
-    else:
-        threshold = floor(layer.weight.numel() * THRESHOLD)
+    unstructured = "unstr" in model.pruning_method
+    threshold = 1 if unstructured else floor(layer.weight.numel() * THRESHOLD)
 
     for prune_iter in range(PRUNE_ITERATIONS): 
-        if prune.is_pruned(layer) and layer.weight_mask.numel() < threshold: break
+        if not unstructured and prune.is_pruned(layer) and layer.weight_mask.numel() < threshold: break
 
         # --- Prune conv layers ---
         conv_sparsity = model.prune(layer, threshold)
@@ -137,7 +135,7 @@ def iterative_prune_train_retrain_conv_layer(model, model_path, conv_idx, trainl
             scheduler.step()
         retrain_acc = evaluate(model, testloader)
 
-        print(f"{model_path[4]}, {model.pooling_method}, {model.pruning_method}, {prune_iter+1}, conv{conv_idx}, {conv_sparsity}, {base_acc}, {pruned_acc}, {retrain_acc}, {retrain_loss}")
+        print(f"{model_version}, {model.pooling_method}, {model.pruning_method}, {prune_iter+1}, conv{conv_idx}, {conv_sparsity}, {base_acc}, {pruned_acc}, {retrain_acc}, {retrain_loss}")
         base_acc = retrain_acc
 
     # torch.save(model.state_dict(), f"{model_version}{model.name}{dataset}conv{conv_idx}{model.pooling_method}.pth")
@@ -257,7 +255,6 @@ if __name__ == "__main__":
     model = AlexNet(num_classes=NUM_CLASSES_CIFAR10, pooling_method=pooling_method, pruning_method=pruning_method).to(DEVICE)
     if not args.model_path:
         model_path = initial_dense_train(model, dataset=dataset, trainloader=trainloader, testloader=testloader)
-        # iterative_prune_train_retrain_conv_layer(model, dataset=dataset, model_path=model_path, conv_idx=conv_idx, trainloader=trainloader, testloader=testloader)
 
     if args.conv_idx is not None: 
         conv_idx = args.conv_idx - 1
