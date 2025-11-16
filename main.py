@@ -118,11 +118,15 @@ def iterative_prune_train_retrain_conv_layer(model, model_path, conv_idx, trainl
     # --- 2. Iterative pruning + retraining ---
     layer = model.conv_layers[conv_idx]
     structured = "str" in model.pruning_method
-    threshold = 1 if structured else floor(layer.weight.numel() * THRESHOLD)
-
+    threshold = floor(layer.out_channels * THRESHOLD) if structured else \
+        floor(layer.weight.numel() * THRESHOLD)
+    channel_density = layer.weight.numel() / layer.out_channels
+    
     for prune_iter in range(PRUNE_ITERATIONS): 
-        if not structured and prune.is_pruned(layer) and layer.weight_mask.numel() < threshold: break
-
+        if prune.is_pruned(layer):
+            threshold = min(threshold, torch.sum(layer.weight_mask == 1) / channel_density) if structured else \
+                min(threshold, layer.weight_mask.numel())
+        
         # --- Prune conv layers ---
         conv_sparsity = model.prune(layer, threshold)
         pruned_acc = evaluate(model, testloader)
