@@ -117,7 +117,7 @@ def iterative_prune_train_retrain_conv_layer(model, model_path, conv_idx, trainl
 
     # --- 2. Iterative pruning + retraining ---
     layer = model.conv_layers[conv_idx]
-    structured = "str" in model.pruning_method
+    structured = "unstr" not in model.pruning_method
     threshold = floor(layer.out_channels * THRESHOLD) if structured else \
         floor(layer.weight.numel() * THRESHOLD)
     channel_density = layer.weight.numel() / layer.out_channels

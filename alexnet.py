@@ -55,6 +55,7 @@ class AlexNet(nn.Module):
             nn.ReLU(inplace=True),
             pool_layer(kernel_size=2, stride=2)   # 8 -> 4
         )
+
         self.classifier = nn.Sequential(
             nn.Dropout(),
             nn.Linear(256 * 4 * 4, 4096),
@@ -67,6 +68,8 @@ class AlexNet(nn.Module):
 
         self.conv_layers = [m for m in self.features if isinstance(m, nn.Conv2d)]
         self.fc_layers = [m for m in self.classifier if isinstance(m, nn.Linear)][:-1] # exclude final FC !!
+
+        self.intermediate_outputs = {}
 
     def forward(self, x):
         x = self.features(x)
@@ -102,16 +105,13 @@ class AlexNet(nn.Module):
     def check_sparsity(self, layer):
         w = layer.weight_mask if prune.is_pruned(layer) else layer.weight
         return torch.sum(w == 0) / w.numel()
-
-
-# if __name__ == "__main__":
-#     input = torch.randn(1, 3, 32, 32)
-#     model = AlexNet()
-#     test = model.conv_layers[0]
-#     print(model.check_sparsity(test))
-#     print(model.l1_structured_prune(test))
-
-#     print(model.l1_structured_prune(test))
-#     print(model.check_sparsity(prune.remove(test, 'weight')))
-
-#     model(input)
+    
+    def save_output(self, name):
+        def hook(module, inp, out):
+            self.intermediate_outputs[name] = out.detach()
+        return hook
+    
+    def attach_hooks(self):
+        self.features[2].register_forward_hook(self.save_output("pool1"))
+        self.features[5].register_forward_hook(self.save_output("pool2"))
+        self.features[12].register_forward_hook(self.save_output("pool3"))
