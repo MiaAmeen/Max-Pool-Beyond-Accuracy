@@ -227,7 +227,7 @@ if __name__ == "__main__":
     parser.add_argument(
         '--pruning_method', 
         type=str, 
-        default='str',
+        default='rand-unstr',
         choices=['unstr', 'str', 'rand-unstr', 'rand-str'],
         required=False
     )
