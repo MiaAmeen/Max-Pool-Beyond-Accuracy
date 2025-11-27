@@ -10,6 +10,7 @@ from tqdm import tqdm
 from alexnet import AlexNet
 import os
 from math import floor
+import copy
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
 
@@ -27,6 +28,7 @@ MOMENTUM = 0.9
 PRUNE_ITERATIONS = 100             # number of prune->retrain cycles
 ALPHA = 0.1                      # quality parameter to multiply stddev (tunable)
 THRESHOLD = 0.05
+THRESHOLDS = [0.3, 0.5, 0.7, 0.9]
 NUM_CLASSES_CIFAR10 = 10
 
 # -------------------------
@@ -146,66 +148,73 @@ def iterative_prune_train_retrain_conv_layer(model, model_path, conv_idx, trainl
     return model
 
 
-def iterative_prune_train_retrain_all_layers(model, model_path, dataset, trainloader, testloader):
-    # Printing Header
-    print("Prune Iteration, conv1, conv2, conv3, conv4, conv5, train accuracy, pruned accuracy, retrain accuracy, retrain loss")
-
-    # Load initial dense model
-    model.load_state_dict(torch.load(model_path, map_location=DEVICE))
-    base_acc = evaluate(model, testloader)
-
-    thresholds = [floor(layer.weights.numel() * THRESHOLD) for layer in model.conv_layers]
-
-    # --- 2. Iterative pruning + retraining ---
-    for prune_iter in range(PRUNE_ITERATIONS):        
-        # --- Prune conv layers ---
-        conv_sparsities = [model.prune(layer, threshold=thresholds[i]) for i, layer in enumerate(model.conv_layers)]
-        pruned_acc = evaluate(model, testloader)
-
-        # Freeze FC layers during conv retraining
-        for layer in model.fc_layers:
-            for param in layer.parameters():
-                param.requires_grad = False
-        for layer in model.conv_layers:
-            for param in layer.parameters():
-                param.requires_grad = True
-        optimizer = optim.SGD(filter(lambda p: p.requires_grad, model.parameters()),
-                              lr=RETRAIN_LR, momentum=MOMENTUM, weight_decay=WEIGHT_DECAY)
-
-        # Retrain conv layers
-        for _ in range(MAX_RETRAIN_EPOCHS):
-            train_one_epoch(model, trainloader, optimizer, CRITERION)
-
-        # --- Prune FC layers ---
-        fc_sparsities = [model.unstructured_magnitude_prune(layer, quality_param=ALPHA) for layer in model.fc_layers]
-
-        # Freeze conv layers during FC retraining
-        for layer in model.conv_layers:
-            for param in layer.parameters():
-                param.requires_grad = False
-        for layer in model.fc_layers:
-            for param in layer.parameters():
-                param.requires_grad = True
-        optimizer = optim.SGD(filter(lambda p: p.requires_grad, model.parameters()),
-                              lr=RETRAIN_LR, momentum=MOMENTUM, weight_decay=WEIGHT_DECAY)
-
-        # Retrain FC layers
-        for _ in range(MAX_RETRAIN_EPOCHS):
-            retrain_loss = train_one_epoch(model, trainloader, optimizer, CRITERION)
-
-        retrain_acc = evaluate(model, testloader)
-
-        print(f"{prune_iter+1}, {', '.join(f'{sparsity:.4f}' for sparsity in conv_sparsities)}, {', '.join(f'{sparsity:.4f}' for sparsity in fc_sparsities)}, {base_acc}, {pruned_acc}, {retrain_acc}, {retrain_loss}")
-        
-        base_acc = retrain_acc
-
-    torch.save(model.state_dict(), f"prune{model.name}{dataset}{model.pooling_method}.pth")
-    return model
-
 def sample_dense_training(dataset, trainloader, testloader, pooling_method):
     for iter in range(15):
         model = AlexNet(num_classes=NUM_CLASSES_CIFAR10, pooling_method=pooling_method).to(DEVICE)
         initial_dense_train(model, dataset=dataset, trainloader=trainloader, testloader=testloader, iter=iter + 1)
+
+
+@torch.no_grad()
+def evaluate_delta(model_init: AlexNet, model_prune: AlexNet, dataloader, layer_name: str="pool1"):
+    model_init.eval()
+    model_prune.eval()
+    model_init.attach_hooks()
+    model_prune.attach_hooks()
+
+    total_samples = 0
+    accumulated = None
+    for images, _ in dataloader:
+        images = images.to(DEVICE)
+
+        model_init(images)
+        model_prune(images)
+
+        out_init  = model_init.intermediate_outputs[layer_name]   # [B, C, H, W]
+        out_prune = model_prune.intermediate_outputs[layer_name]  # [B, C, H, W]
+
+        delta = (out_init - out_prune).abs()   # [B, C, H, W]
+        delta_2d = delta.mean(dim=1)           # [B, H, W]
+        batch_size = delta_2d.size(0)
+        total_samples += batch_size
+
+        if accumulated is None:
+            accumulated = delta_2d.sum(dim=0)        # [H, W]
+        else:
+            accumulated += delta_2d.sum(dim=0)
+
+    final_delta_image = accumulated / total_samples
+
+    model_init.detach_hooks()
+    model_prune.detach_hooks()
+
+    return final_delta_image.cpu()
+        
+def iterative_delta(model_init: AlexNet, model_path: str, conv_idx: int, trainloader, testloader):
+    print("model_version, pooling_method, pruning_method, sparsity, stage")
+
+    model_init.load_state_dict(torch.load(model_path, map_location=DEVICE))
+    model_version = model_path.split("/")[-1][4]
+    pooling_method, pruning_method = model_init.pooling_method, model_init.pruning_method
+    layer_name = f"pool{conv_idx+1}"
+
+    for sparsity in THRESHOLDS:
+        model_pruned = copy.deepcopy(model_init).to(DEVICE)
+        model_pruned.prune(
+            model_pruned.conv_layers[conv_idx], 
+            sparsity
+        )
+
+        heatmap = evaluate_delta(model_init, model_pruned, testloader, layer_name=layer_name)
+        torch.save(heatmap, f"delta-{model_version}-{pooling_method}-{pruning_method}-{layer_name}-{sparsity}-pruned.pth")
+
+        optimizer = optim.Adam(model_pruned.parameters(), lr=RETRAIN_LR, weight_decay=WEIGHT_DECAY)
+        scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=MAX_RETRAIN_EPOCHS)
+        for _ in range(MAX_RETRAIN_EPOCHS):
+            train_one_epoch(model_pruned, trainloader, optimizer, CRITERION)
+            scheduler.step()
+
+        heatmap = evaluate_delta(model_init, model_pruned, testloader, layer_name=layer_name)
+        torch.save(heatmap, f"delta-{model_version}-{pooling_method}-{pruning_method}-{layer_name}-{sparsity}-tuned.pth")
 
 # -------------------------
 # Run experiment
@@ -245,6 +254,10 @@ if __name__ == "__main__":
         '--sample', 
         action='store_true',
     )
+    parser.add_argument(
+        '--delta', 
+        action='store_true',
+    )
     args = parser.parse_args()
         
     dataset = args.dataset
@@ -263,4 +276,7 @@ if __name__ == "__main__":
     if args.conv_idx is not None: 
         conv_idx = args.conv_idx - 1
         model_path = MODEL_PATH + args.model_path
-        iterative_prune_train_retrain_conv_layer(model, model_path=model_path, conv_idx=conv_idx, trainloader=trainloader, testloader=testloader)
+        if args.delta:
+            iterative_delta(model, model_path, conv_idx, trainloader, testloader)
+        else:
+            iterative_prune_train_retrain_conv_layer(model, model_path=model_path, conv_idx=conv_idx, trainloader=trainloader, testloader=testloader)

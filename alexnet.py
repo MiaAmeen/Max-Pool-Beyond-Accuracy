@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.utils.prune as prune
 
+
 class MinPool2d(nn.Module):
     def __init__(self, kernel_size, stride=None, padding=0):
         super().__init__()
@@ -76,26 +77,26 @@ class AlexNet(nn.Module):
         x = torch.flatten(x, 1)
         return self.classifier(x)
     
-    def l1_unstructured_prune(self, layer, threshold, remove=False):
+    def l1_unstructured_prune(self, layer: nn.Module, threshold, remove: bool=False):
         prune.l1_unstructured(layer, name="weight", amount=threshold)
         if remove: prune.remove(layer, 'weight')
 
         return self.check_sparsity(layer)
     
-    def rand_unstructured_prune(self, layer, threshold, remove=False):
+    def rand_unstructured_prune(self, layer: nn.Module, threshold, remove: bool=False):
         prune.random_unstructured(layer, name="weight", amount=threshold)
         if remove: prune.remove(layer, 'weight')
 
         return self.check_sparsity(layer)
     
-    def l1_structured_prune(self, layer, threshold, remove=False):
+    def l1_structured_prune(self, layer: nn.Module, threshold, remove: bool=False):
         # Prune entire channels with smallest L1-norms of their weights
         prune.ln_structured(layer, name="weight", amount=threshold, n=1, dim=0)  
         if remove: prune.remove(layer, 'weight') # not recommended to set to True; model will simply set "pruned" parameters to zero
         
         return self.check_sparsity(layer)
 
-    def rand_structured_prune(self, layer, threshold, remove=False):
+    def rand_structured_prune(self, layer: nn.Module, threshold, remove: bool=False):
         # Randomly prune entire channels
         prune.random_structured(layer, name="weight", amount=threshold, dim=0)
         if remove: prune.remove(layer, 'weight')
@@ -106,12 +107,50 @@ class AlexNet(nn.Module):
         w = layer.weight_mask if prune.is_pruned(layer) else layer.weight
         return torch.sum(w == 0) / w.numel()
     
-    def save_output(self, name):
+    def save_output(self, name: str):
         def hook(module, inp, out):
             self.intermediate_outputs[name] = out.detach()
         return hook
     
     def attach_hooks(self):
-        self.features[2].register_forward_hook(self.save_output("pool1"))
-        self.features[5].register_forward_hook(self.save_output("pool2"))
-        self.features[12].register_forward_hook(self.save_output("pool3"))
+        self.hooks = []  # store hook handles
+        h1 = self.features[2].register_forward_hook(self.save_output("pool1"))
+        h2 = self.features[5].register_forward_hook(self.save_output("pool2"))
+        h3 = self.features[12].register_forward_hook(self.save_output("pool3"))
+
+        self.hooks.extend([h1, h2, h3])
+
+    def detach_hooks(self):
+        if hasattr(self, "hooks"):
+            for h in self.hooks:
+                h.remove()
+            self.hooks = []
+
+
+# if __name__ == "__main__":
+#     from main import evaluate_delta, get_dataloaders
+#     import matplotlib.pyplot as plt
+#     import copy
+
+#     model = AlexNet().to("mps")
+#     model.load_state_dict(torch.load("", map_location="mps"))
+
+#     model_pruned = copy.deepcopy(model).to("mps")
+#     model_pruned.prune(model_pruned.conv_layers[0], 0.3)
+
+#     _, test = get_dataloaders("CIFAR10")
+#     img = evaluate_delta(model, model_pruned, test, layer_name="pool1")
+#     print(img.shape)
+
+#     plt.imshow(img, cmap="viridis")
+#     plt.colorbar()
+#     plt.show()
+
+    # test = model.conv_layers[0]
+    # print(model.check_sparsity(test))
+    # print(test.weight.numel() / test.out_channels)
+    # print(model.l1_structured_prune(test, test.out_channels // 2))
+    # print(torch.sum(test.weight_mask == 1))
+    # print(torch.sum(test.weight_mask == 1) / 27)
+    # print(model.check_sparsity(prune.remove(test, 'weight')))
+    # model(input)
