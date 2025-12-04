@@ -30,6 +30,7 @@ ALPHA = 0.1                      # quality parameter to multiply stddev (tunable
 THRESHOLD = 0.05
 THRESHOLDS = [0.3, 0.5, 0.7, 0.9]
 NUM_CLASSES_CIFAR10 = 10
+NUM_CLASSES_CIFAR100 = 100
 
 # This is for producing deltas... maps the ith pooling layer to jth conv layer
 conv_idx_map = {
@@ -39,10 +40,10 @@ conv_idx_map = {
 # -------------------------
 # Data (CIFAR-10)
 # -------------------------
-DATA_PATH = "/share/csc591007f25/fameen/MaxPooling/data/"
-MODEL_PATH = "/share/csc591007f25/fameen/MaxPooling/models/"
-# DATA_PATH = "./data/"
-# MODEL_PATH = "./models/"
+# DATA_PATH = "/share/csc591007f25/fameen/MaxPooling/data/"
+# MODEL_PATH = "/share/csc591007f25/fameen/MaxPooling/models/"
+DATA_PATH = "./data/"
+MODEL_PATH = "./models/"
 
 
 def get_dataloaders(dataset, batch_size=BATCH_SIZE, toy_data=False):
@@ -157,9 +158,9 @@ def iterative_prune_retrain_conv_layer(model, model_path, conv_idx, trainloader,
     return model
 
 
-def sample_dense_training(dataset, trainloader, testloader, pooling_method, model_path=None):
+def sample_dense_training(dataset, num_classes, trainloader, testloader, pooling_method, model_path=None):
     for iter in range(1):
-        model = AlexNet(num_classes=NUM_CLASSES_CIFAR10, pooling_method=pooling_method).to(DEVICE)
+        model = AlexNet(num_classes=num_classes, pooling_method=pooling_method).to(DEVICE)
         if model_path: model.load_state_dict(torch.load(model_path, map_location=DEVICE))
         initial_dense_train(model, dataset=dataset, trainloader=trainloader, testloader=testloader, iter=iter + 1)
 
@@ -270,15 +271,16 @@ def main():
     
     model_path = MODEL_PATH + args.model_path if args.model_path else None
     dataset = args.dataset
+    num_classes = NUM_CLASSES_CIFAR10 if dataset == "CIFAR10" else NUM_CLASSES_CIFAR100
     pooling_method = args.pooling_method
     pruning_method = args.pruning_method
     trainloader, testloader = get_dataloaders(dataset)
 
     if args.sample:
-        sample_dense_training(dataset=dataset, trainloader=trainloader, testloader=testloader, pooling_method=pooling_method, model_path=model_path)
+        sample_dense_training(dataset=dataset, num_classes=num_classes, trainloader=trainloader, testloader=testloader, pooling_method=pooling_method, model_path=model_path)
         quit(0)
 
-    model = AlexNet(num_classes=NUM_CLASSES_CIFAR10, pooling_method=pooling_method, pruning_method=pruning_method).to(DEVICE)
+    model = AlexNet(num_classes=num_classes, pooling_method=pooling_method, pruning_method=pruning_method).to(DEVICE)
     if not model_path:
         model_path = initial_dense_train(model, dataset=dataset, trainloader=trainloader, testloader=testloader)
 
