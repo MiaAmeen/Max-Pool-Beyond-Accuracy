@@ -39,10 +39,10 @@ conv_idx_map = {
 # -------------------------
 # Data (CIFAR-10)
 # -------------------------
-# DATA_PATH = "/share/csc591007f25/fameen/MaxPooling/data/"
-# MODEL_PATH = "/share/csc591007f25/fameen/MaxPooling/models/"
-DATA_PATH = "./data/"
-MODEL_PATH = "./models/"
+DATA_PATH = "/share/csc591007f25/fameen/MaxPooling/data/"
+MODEL_PATH = "/share/csc591007f25/fameen/MaxPooling/models/"
+# DATA_PATH = "./data/"
+# MODEL_PATH = "./models/"
 
 
 def get_dataloaders(dataset, batch_size=BATCH_SIZE, toy_data=False):
@@ -101,16 +101,18 @@ def evaluate(model, dataloader):
 def initial_dense_train(model, dataset, trainloader, testloader, iter=None):
     optimizer = optim.SGD(model.parameters(), lr=LR, momentum=MOMENTUM, weight_decay=WEIGHT_DECAY)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=INITIAL_TRAIN_EPOCHS)  # match full training duration
+    model_name = model.name
+    pooling_method = model.pooling_method
 
-    print("ITER, Epoch, Loss, Train Acc, Test Acc")
+    print("pool, ITER, Epoch, Loss, Train Acc, Test Acc")
     for epoch in range(INITIAL_TRAIN_EPOCHS):
         loss = train_one_epoch(model, trainloader, optimizer, CRITERION)
         scheduler.step()
         train_acc = evaluate(model, trainloader)
         test_acc = evaluate(model, testloader)
-        print(f"{iter if iter else 1}, {epoch+1}/{INITIAL_TRAIN_EPOCHS}, {loss:.4f}, {train_acc:.4f}, {test_acc:.4f}")
+        print(f"{pooling_method},{iter if iter else 1},{epoch+1}/{INITIAL_TRAIN_EPOCHS},{loss:.4f},{train_acc:.4f},{test_acc:.4f}")
 
-    model_path = MODEL_PATH + f"init{iter if iter else ""}{model.name}{dataset}{model.pooling_method}.pth"
+    model_path = MODEL_PATH + f"init{iter if iter else ""}{model_name}{dataset}{pooling_method}.pth"
     torch.save(model.state_dict(), model_path)
     return model_path
 
@@ -266,7 +268,7 @@ def main():
     )
     args = parser.parse_args()
     
-    model_path = args.model_path if args.model_path else None
+    model_path = MODEL_PATH + args.model_path if args.model_path else None
     dataset = args.dataset
     pooling_method = args.pooling_method
     pruning_method = args.pruning_method
@@ -282,7 +284,6 @@ def main():
 
     if args.conv_idx is not None: 
         conv_idx = args.conv_idx - 1
-        model_path = MODEL_PATH + args.model_path
         iterative_prune_retrain_conv_layer(model, model_path=model_path, conv_idx=conv_idx, trainloader=trainloader, testloader=testloader)
 
     
@@ -290,7 +291,7 @@ def main():
 if __name__ == "__main__":
     main()
 
-    import matplotlib.pyplot as plt
+    # import matplotlib.pyplot as plt
 
     # delta("unstr", pool_idx=3)
 
