@@ -19,9 +19,9 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.ba
 # -------------------------
 CRITERION = nn.CrossEntropyLoss()
 BATCH_SIZE = 128
-INITIAL_TRAIN_EPOCHS = 100        # dense training
+INITIAL_TRAIN_EPOCHS = 200        # dense training
 MAX_RETRAIN_EPOCHS = 100               # fine-tune after each pruning
-LR = .001
+LR = .0001
 RETRAIN_LR = 0.0001
 WEIGHT_DECAY = 1e-4              # L2 regularization (weight decay)
 MOMENTUM = 0.9
@@ -40,11 +40,10 @@ conv_idx_map = {
 # -------------------------
 # Data (CIFAR-10)
 # -------------------------
-# DATA_PATH = "/share/csc591007f25/fameen/MaxPooling/data/"
-# MODEL_PATH = "/share/csc591007f25/fameen/MaxPooling/models/"
 DATA_PATH = "./data/"
 MODEL_PATH = "./models/"
-
+DATA_PATH = "/share/csc591007f25/fameen/MaxPooling/data/"
+MODEL_PATH = "/share/csc591007f25/fameen/MaxPooling/models/"
 
 def get_dataloaders(dataset, batch_size=BATCH_SIZE, toy_data=False):
     transform = transforms.Compose([
