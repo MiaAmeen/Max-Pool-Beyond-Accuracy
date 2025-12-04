@@ -56,7 +56,6 @@ class AlexNet(nn.Module):
             nn.ReLU(inplace=True),
             pool_layer(kernel_size=2, stride=2)   # 8 -> 4
         )
-
         self.classifier = nn.Sequential(
             nn.Dropout(),
             nn.Linear(256 * 4 * 4, 4096),
@@ -125,32 +124,3 @@ class AlexNet(nn.Module):
             for h in self.hooks:
                 h.remove()
             self.hooks = []
-
-
-# if __name__ == "__main__":
-#     from main import evaluate_delta, get_dataloaders
-#     import matplotlib.pyplot as plt
-#     import copy
-
-#     model = AlexNet().to("mps")
-#     model.load_state_dict(torch.load("", map_location="mps"))
-
-#     model_pruned = copy.deepcopy(model).to("mps")
-#     model_pruned.prune(model_pruned.conv_layers[0], 0.3)
-
-#     _, test = get_dataloaders("CIFAR10")
-#     img = evaluate_delta(model, model_pruned, test, layer_name="pool1")
-#     print(img.shape)
-
-#     plt.imshow(img, cmap="viridis")
-#     plt.colorbar()
-#     plt.show()
-
-    # test = model.conv_layers[0]
-    # print(model.check_sparsity(test))
-    # print(test.weight.numel() / test.out_channels)
-    # print(model.l1_structured_prune(test, test.out_channels // 2))
-    # print(torch.sum(test.weight_mask == 1))
-    # print(torch.sum(test.weight_mask == 1) / 27)
-    # print(model.check_sparsity(prune.remove(test, 'weight')))
-    # model(input)

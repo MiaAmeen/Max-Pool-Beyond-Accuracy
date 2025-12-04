@@ -31,13 +31,20 @@ THRESHOLD = 0.05
 THRESHOLDS = [0.3, 0.5, 0.7, 0.9]
 NUM_CLASSES_CIFAR10 = 10
 
+# This is for producing deltas... maps the ith pooling layer to jth conv layer
+conv_idx_map = {
+    1: 0, 2: 1, 3: 4
+}
+
 # -------------------------
 # Data (CIFAR-10)
 # -------------------------
-DATA_PATH = "/share/csc591007f25/fameen/MaxPooling/data/"
-# DATA_PATH = "./data/"
-MODEL_PATH = "/share/csc591007f25/fameen/MaxPooling/models/"
-# MODEL_PATH = "./models/"
+# DATA_PATH = "/share/csc591007f25/fameen/MaxPooling/data/"
+# MODEL_PATH = "/share/csc591007f25/fameen/MaxPooling/models/"
+DATA_PATH = "./data/"
+MODEL_PATH = "./models/"
+
+
 def get_dataloaders(dataset, batch_size=BATCH_SIZE, toy_data=False):
     transform = transforms.Compose([
         transforms.ToTensor(),
@@ -108,7 +115,7 @@ def initial_dense_train(model, dataset, trainloader, testloader, iter=None):
     return model_path
 
 
-def iterative_prune_train_retrain_conv_layer(model, model_path, conv_idx, trainloader, testloader):
+def iterative_prune_retrain_conv_layer(model, model_path, conv_idx, trainloader, testloader):
     # Printing Header3
     print(f"model version, pooling method, pruning method, prune iteration, conv_layer, sparsity, train accuracy, pruned accuracy, retrain accuracy, retrain loss")
 
@@ -148,9 +155,10 @@ def iterative_prune_train_retrain_conv_layer(model, model_path, conv_idx, trainl
     return model
 
 
-def sample_dense_training(dataset, trainloader, testloader, pooling_method):
-    for iter in range(15):
+def sample_dense_training(dataset, trainloader, testloader, pooling_method, model_path=None):
+    for iter in range(1):
         model = AlexNet(num_classes=NUM_CLASSES_CIFAR10, pooling_method=pooling_method).to(DEVICE)
+        if model_path: model.load_state_dict(torch.load(model_path, map_location=DEVICE))
         initial_dense_train(model, dataset=dataset, trainloader=trainloader, testloader=testloader, iter=iter + 1)
 
 
@@ -189,37 +197,39 @@ def evaluate_delta(model_init: AlexNet, model_prune: AlexNet, dataloader, layer_
 
     return final_delta_image.cpu()
         
-def iterative_delta(model_init: AlexNet, model_path: str, conv_idx: int, trainloader, testloader):
-    print("model_version, pooling_method, pruning_method, sparsity, stage")
+def delta(pruning_method, pool_idx):
+    def delta_helper(model_init, pool_idx, test):
+        imgs = {}
+        layer_name = f"pool{pool_idx}"
+        conv_idx = conv_idx_map[pool_idx]
+        for thresh in THRESHOLDS:
+            model_pruned = copy.deepcopy(model_init).to(DEVICE)
+            print(model_pruned.prune(model_pruned.conv_layers[conv_idx], thresh))
+            output = evaluate_delta(model_init, model_pruned, test, layer_name=layer_name)
+            imgs[f"max-{thresh}"] = output
+            torch.save(output, f"deltas/delta-{2}-{model_init.pooling_method}-{model_init.pruning_method}-{layer_name}-{thresh}.pth")
+        return imgs
 
-    model_init.load_state_dict(torch.load(model_path, map_location=DEVICE))
-    model_version = model_path.split("/")[-1][4]
-    pooling_method, pruning_method = model_init.pooling_method, model_init.pruning_method
-    layer_name = f"pool{conv_idx+1}"
+    MODEL_MAX = AlexNet(
+        num_classes=NUM_CLASSES_CIFAR10, 
+        pooling_method="max", 
+        pruning_method=pruning_method).to(DEVICE)
+    MODEL_MAX.load_state_dict(torch.load("/Users/destroyerofworlds/Desktop/DL/Max-Pool-Beyond-Accuracy/models/init2AlexNetCIFAR10max.pth", map_location=DEVICE))
+    
+    MODEL_AVG = AlexNet(
+        num_classes=NUM_CLASSES_CIFAR10, 
+        pooling_method="avg", 
+        pruning_method=pruning_method).to(DEVICE)
+    MODEL_AVG.load_state_dict(torch.load("/Users/destroyerofworlds/Desktop/DL/Max-Pool-Beyond-Accuracy/models/init2AlexNetCIFAR10avg.pth", map_location=DEVICE))
 
-    for sparsity in THRESHOLDS:
-        model_pruned = copy.deepcopy(model_init).to(DEVICE)
-        model_pruned.prune(
-            model_pruned.conv_layers[conv_idx], 
-            sparsity
-        )
-
-        heatmap = evaluate_delta(model_init, model_pruned, testloader, layer_name=layer_name)
-        torch.save(heatmap, f"delta-{model_version}-{pooling_method}-{pruning_method}-{layer_name}-{sparsity}-pruned.pth")
-
-        optimizer = optim.Adam(model_pruned.parameters(), lr=RETRAIN_LR, weight_decay=WEIGHT_DECAY)
-        scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=MAX_RETRAIN_EPOCHS)
-        for _ in range(MAX_RETRAIN_EPOCHS):
-            train_one_epoch(model_pruned, trainloader, optimizer, CRITERION)
-            scheduler.step()
-
-        heatmap = evaluate_delta(model_init, model_pruned, testloader, layer_name=layer_name)
-        torch.save(heatmap, f"delta-{model_version}-{pooling_method}-{pruning_method}-{layer_name}-{sparsity}-tuned.pth")
+    _, test = get_dataloaders("CIFAR10")
+    delta_helper(MODEL_MAX, pool_idx, test)
+    delta_helper(MODEL_AVG, pool_idx, test)
 
 # -------------------------
 # Run experiment
 # -------------------------
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         '--dataset', 
@@ -254,29 +264,75 @@ if __name__ == "__main__":
         '--sample', 
         action='store_true',
     )
-    parser.add_argument(
-        '--delta', 
-        action='store_true',
-    )
     args = parser.parse_args()
-        
+    
+    model_path = args.model_path if args.model_path else None
     dataset = args.dataset
     pooling_method = args.pooling_method
     pruning_method = args.pruning_method
     trainloader, testloader = get_dataloaders(dataset)
 
-    if args.sample is True:
-        sample_dense_training(dataset=dataset, trainloader=trainloader, testloader=testloader, pooling_method=pooling_method)
+    if args.sample:
+        sample_dense_training(dataset=dataset, trainloader=trainloader, testloader=testloader, pooling_method=pooling_method, model_path=model_path)
         quit(0)
 
     model = AlexNet(num_classes=NUM_CLASSES_CIFAR10, pooling_method=pooling_method, pruning_method=pruning_method).to(DEVICE)
-    if not args.model_path:
+    if not model_path:
         model_path = initial_dense_train(model, dataset=dataset, trainloader=trainloader, testloader=testloader)
 
     if args.conv_idx is not None: 
         conv_idx = args.conv_idx - 1
         model_path = MODEL_PATH + args.model_path
-        if args.delta:
-            iterative_delta(model, model_path, conv_idx, trainloader, testloader)
-        else:
-            iterative_prune_train_retrain_conv_layer(model, model_path=model_path, conv_idx=conv_idx, trainloader=trainloader, testloader=testloader)
+        iterative_prune_retrain_conv_layer(model, model_path=model_path, conv_idx=conv_idx, trainloader=trainloader, testloader=testloader)
+
+    
+
+if __name__ == "__main__":
+    main()
+
+    import matplotlib.pyplot as plt
+
+    # delta("unstr", pool_idx=3)
+
+    # pool = "pool1"
+    # _max = torch.load(f"results/deltas/delta-2-max-unstr-{pool}-0.9.pth") \
+    #     + torch.load(f"results/deltas/delta-2-max-unstr-{pool}-0.5.pth") \
+    #     + torch.load(f"results/deltas/delta-2-max-unstr-{pool}-0.7.pth") \
+    #     + torch.load(f"results/deltas/delta-2-max-unstr-{pool}-0.9.pth")
+    
+    # avg = torch.load(f"results/deltas/delta-2-avg-unstr-{pool}-0.9.pth") \
+    #     + torch.load(f"results/deltas/delta-2-avg-unstr-{pool}-0.5.pth") \
+    #     + torch.load(f"results/deltas/delta-2-avg-unstr-{pool}-0.7.pth") \
+    #     + torch.load(f"results/deltas/delta-2-avg-unstr-{pool}-0.9.pth")
+    
+    # print("Tensor shape: ", _max.size())
+    # print("Max tensor range:", _max.min(), _max.max())
+    # print("Avg tensor min:", avg.min(), avg.max())
+    
+    # min_val = torch.min(_max.min(), avg.min())
+    # max_val = torch.max(_max.max(), avg.max())
+
+    # normalized_max = (_max - min_val) / (max_val - min_val)
+    # normalized_avg = (avg - min_val) / (max_val - min_val)
+
+    # # Compute global min and max for shared color scale
+    # vmin = min(normalized_max.min(), normalized_avg.min())
+    # vmax = max(normalized_max.max(), normalized_avg.max())
+
+    # fig, axes = plt.subplots(2, 1, figsize=(8, 12))
+
+    # im0 = axes[0].imshow(normalized_max, cmap="Blues", aspect="auto", vmin=vmin, vmax=vmax)
+    # im1 = axes[1].imshow(normalized_avg, cmap="Blues", aspect="auto", vmin=vmin, vmax=vmax)
+    # axes[0].set_xticks([])  # hide x ticks
+    # axes[0].set_yticks([])
+    # axes[1].set_xticks([])  # hide x ticks
+    # axes[1].set_yticks([])
+
+    # # Single shared colorbar
+    # cbar = fig.colorbar(im0, ax=axes.ravel().tolist(), fraction=0.046, pad=0.04)
+    # cbar.set_label("Delta")
+
+    # plt.tight_layout()
+    # plt.show()
+
+
